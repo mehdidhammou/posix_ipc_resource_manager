@@ -67,7 +67,7 @@ Status process_statuses[THREAD_NUM - 1];
 ResourceList resources = {10, 5, 7};
 
 // semaphores and mutexes
-pthread_mutex_t mutexBuffer;
+sem_t *mutex_buffer;
 sem_t *buffer_empty;
 sem_t *buffer_full;
 sem_t *respone_empty;
@@ -89,6 +89,12 @@ void init_semaphores()
     }
 }
 
+void init_mutexes()
+{
+    // Initialize named mutexes, we use sem_open with initial value 1 to simulate mutex
+    mutex_buffer = sem_open("/mutex_buffer", O_CREAT, 0644, 1);
+}
+
 void create_request(Instruction inst, int i)
 {
     Request req;
@@ -97,7 +103,7 @@ void create_request(Instruction inst, int i)
     req.resources = inst.resources;
 
     sem_wait(&buffer_empty);
-    pthread_mutex_lock(&mutexBuffer);
+    pthread_mutex_lock(&mutex_buffer);
 
     // add to the buffer
     buffer[next_request_index] = req;
@@ -105,7 +111,7 @@ void create_request(Instruction inst, int i)
     // increment the index
     next_request_index++;
 
-    pthread_mutex_unlock(&mutexBuffer);
+    pthread_mutex_unlock(&mutex_buffer);
     sem_post(&buffer_full);
 }
 
@@ -158,7 +164,7 @@ void *manager()
     {
         // Remove from the buffer
         sem_wait(&buffer_full);
-        pthread_mutex_lock(&mutexBuffer);
+        pthread_mutex_lock(&mutex_buffer);
         // read the request from the buffer
         next_request_index--;
         Request req = buffer[next_request_index];
@@ -166,7 +172,7 @@ void *manager()
         // clear the buffer
         memset(&buffer[next_request_index], 0, sizeof(Request));
 
-        pthread_mutex_unlock(&mutexBuffer);
+        pthread_mutex_unlock(&mutex_buffer);
         sem_post(&buffer_empty);
 
         // handle request
@@ -244,11 +250,6 @@ void *manager()
     exit(0);
 }
 
-void init_mutexes()
-{
-    pthread_mutex_init(&mutexBuffer, NULL);
-}
-
 void init_message_queues()
 {
     // initialize the process statuses array
@@ -270,7 +271,7 @@ void init_message_queues()
 
 void cleanup()
 {
-    pthread_mutex_destroy(&mutexBuffer);
+    sem_close(mutex_buffer);
     // Close named semaphores
     sem_close(buffer_empty);
     sem_close(buffer_full);
@@ -293,7 +294,7 @@ void init()
 
 int main(int argc, char *argv[])
 {
-    
+
     init();
 
     for (int i = 0; i < THREAD_NUM; i++)
