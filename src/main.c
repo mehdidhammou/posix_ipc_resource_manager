@@ -13,7 +13,6 @@
 #define BUFFER_SIZE 3
 
 // structs
-
 typedef struct
 {
     int n_1;
@@ -126,6 +125,9 @@ void *process(int i)
     }
 
     // Add to the buffer
+
+    fclose(f);
+    exit(0);
 }
 
 bool is_request_satisfied(ResourceList req, ResourceList res)
@@ -217,6 +219,12 @@ void *manager()
             process_statuses[req.id].time_blocked++;
         }
     }
+
+    // sem_post
+
+    // sem_wait
+
+    exit(0);
 }
 
 int main(int argc, char *argv[])
@@ -251,29 +259,24 @@ int main(int argc, char *argv[])
 
     for (int i = 0; i < THREAD_NUM; i++)
     {
-        if (i < THREAD_NUM - 1)
+        if (fork() == 0)
         {
-            if (pthread_create(&th[i], NULL, &process, NULL) != 0)
+            if (i == THREAD_NUM - 1)
             {
-                perror("Failed to create thread");
+                manager();
             }
-        }
-        else
-        {
-            if (pthread_create(&th[i], NULL, &manager, NULL) != 0)
+            else
             {
-                perror("Failed to create thread");
+                process(i);
             }
         }
     }
 
     for (int i = 0; i < THREAD_NUM; i++)
     {
-        if (pthread_join(th[i], NULL) != 0)
-        {
-            perror("Failed to join thread");
-        }
+        wait(NULL);
     }
+
     sem_destroy(&bufferEmpty);
     sem_destroy(&bufferFull);
     sem_destroy(&responseEmpty);
