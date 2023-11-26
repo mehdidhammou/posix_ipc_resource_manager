@@ -6,9 +6,12 @@
 #include <time.h>
 #include <semaphore.h>
 #include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 #include <sys/wait.h>
 #include <string.h>
 #include <stdbool.h>
+#include <fcntl.h>
 #define THREAD_NUM 6
 #define BUFFER_SIZE 3
 
@@ -65,12 +68,26 @@ ResourceList resources = {10, 5, 7};
 
 // semaphores and mutexes
 pthread_mutex_t mutexBuffer;
-sem_t bufferEmpty;
-sem_t bufferFull;
-sem_t responseEmpty;
+sem_t *buffer_empty;
+sem_t *buffer_full;
+sem_t *respone_empty;
 
 // indices
 int next_request_index = 0;
+
+void init_semaphores()
+{
+    // Initialize named semaphores
+    buffer_empty = sem_open("/buffer_empty", O_CREAT, 0644, BUFFER_SIZE);
+    buffer_full = sem_open("/buffer_full", O_CREAT, 0644, 0);
+    respone_empty = sem_open("/respone_empty", O_CREAT, 0644, 1);
+
+    if (buffer_empty == SEM_FAILED || buffer_full == SEM_FAILED || respone_empty == SEM_FAILED)
+    {
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+}
 
 void create_request(Instruction inst, int i)
 {
@@ -79,7 +96,7 @@ void create_request(Instruction inst, int i)
     req.id = i;
     req.resources = inst.resources;
 
-    sem_wait(&bufferEmpty);
+    sem_wait(&buffer_empty);
     pthread_mutex_lock(&mutexBuffer);
 
     // add to the buffer
@@ -89,7 +106,7 @@ void create_request(Instruction inst, int i)
     next_request_index++;
 
     pthread_mutex_unlock(&mutexBuffer);
-    sem_post(&bufferFull);
+    sem_post(&buffer_full);
 }
 
 void *process(int i)
@@ -140,7 +157,7 @@ void *manager()
     while (1)
     {
         // Remove from the buffer
-        sem_wait(&bufferFull);
+        sem_wait(&buffer_full);
         pthread_mutex_lock(&mutexBuffer);
         // read the request from the buffer
         next_request_index--;
@@ -150,10 +167,10 @@ void *manager()
         memset(&buffer[next_request_index], 0, sizeof(Request));
 
         pthread_mutex_unlock(&mutexBuffer);
-        sem_post(&bufferEmpty);
+        sem_post(&buffer_empty);
 
         // handle request
-        sem_wait(&responseEmpty);
+        sem_wait(&respone_empty);
         // if the resources are available
         bool is_available = false;
         if (req.resources.n_1 <= resources.n_1 && req.resources.n_2 <= resources.n_2 && req.resources.n_3 <= resources.n_3)
@@ -227,21 +244,14 @@ void *manager()
     exit(0);
 }
 
-int main(int argc, char *argv[])
+void init_mutexes()
 {
-
-    // initialize the threads array
-    pthread_t th[THREAD_NUM];
-
-    // initialize the mutex
     pthread_mutex_init(&mutexBuffer, NULL);
+}
 
-    // initialize the semaphores
-    sem_init(&bufferEmpty, 0, BUFFER_SIZE);
-    sem_init(&bufferFull, 0, 0);
-    sem_init(&responseEmpty, 0, 1);
-
-    // initialize the process statuses
+void init_message_queues()
+{
+    // initialize the process statuses array
     for (int i = 0; i < THREAD_NUM - 1; i++)
     {
         process_statuses[i].is_active = true;
@@ -256,6 +266,35 @@ int main(int argc, char *argv[])
         requests[i].n_2 = 0;
         requests[i].n_3 = 0;
     }
+}
+
+void cleanup()
+{
+    pthread_mutex_destroy(&mutexBuffer);
+    // Close named semaphores
+    sem_close(buffer_empty);
+    sem_close(buffer_full);
+    sem_close(respone_empty);
+
+    // Unlink named semaphores
+    sem_unlink("/buffer_empty");
+    sem_unlink("/buffer_full");
+    sem_unlink("/respone_empty");
+}
+
+void init()
+{
+    init_semaphores();
+
+    init_mutexes();
+
+    init_message_queues();
+}
+
+int main(int argc, char *argv[])
+{
+    
+    init();
 
     for (int i = 0; i < THREAD_NUM; i++)
     {
@@ -277,9 +316,7 @@ int main(int argc, char *argv[])
         wait(NULL);
     }
 
-    sem_destroy(&bufferEmpty);
-    sem_destroy(&bufferFull);
-    sem_destroy(&responseEmpty);
-    pthread_mutex_destroy(&mutexBuffer);
+    cleanup();
+
     return 0;
 }
