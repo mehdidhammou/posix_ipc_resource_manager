@@ -1,9 +1,9 @@
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <time.h>
 #include <semaphore.h>
 #include <sys/types.h>
 #include <sys/ipc.h>
@@ -12,312 +12,196 @@
 #include <string.h>
 #include <stdbool.h>
 #include <fcntl.h>
-#define THREAD_NUM 6
-#define BUFFER_SIZE 3
+#include <string.h>
+#include "utils.h"
 
-// structs
-typedef struct
+void process(FILE *f, int i)
 {
-    int n_1;
-    int n_2;
-    int n_3;
-} ResourceList;
 
-typedef struct
-{
-    int type;
-    ResourceList resources;
-} Instruction;
-
-typedef struct
-{
-    int id;
-    ResourceList resources;
-} Request;
-
-typedef struct
-{
-    int id;
-    ResourceList resources;
-} Response;
-
-typedef struct
-{
-    bool is_active;
-    ResourceList resources;
-    int requistions_count;
-    int time_blocked;
-} Status;
-
-// arrays
-
-// buffer for requests made by the processes
-Request buffer[BUFFER_SIZE];
-
-// array for requests that were not satisfied
-ResourceList requests[THREAD_NUM - 1];
-
-// array for responses
-Response responses[THREAD_NUM - 1];
-
-// array for the status of the processes
-Status process_statuses[THREAD_NUM - 1];
-
-// resources
-ResourceList resources = {10, 5, 7};
-
-// semaphores and mutexes
-sem_t *mutex_buffer;
-sem_t *buffer_empty;
-sem_t *buffer_full;
-sem_t *respone_empty;
-
-// indices
-int next_request_index = 0;
-
-void init_semaphores()
-{
-    // Initialize named semaphores
-    buffer_empty = sem_open("/buffer_empty", O_CREAT, 0644, BUFFER_SIZE);
-    buffer_full = sem_open("/buffer_full", O_CREAT, 0644, 0);
-    respone_empty = sem_open("/respone_empty", O_CREAT, 0644, 1);
-
-    if (buffer_empty == SEM_FAILED || buffer_full == SEM_FAILED || respone_empty == SEM_FAILED)
-    {
-        perror("sem_open");
-        exit(EXIT_FAILURE);
-    }
-}
-
-void init_mutexes()
-{
-    // Initialize named mutexes, we use sem_open with initial value 1 to simulate mutex
-    mutex_buffer = sem_open("/mutex_buffer", O_CREAT, 0644, 1);
-}
-
-void create_request(Instruction inst, int i)
-{
     Request req;
-
-    req.id = i;
-    req.resources = inst.resources;
-
-    sem_wait(&buffer_empty);
-    pthread_mutex_lock(&mutex_buffer);
-
-    // add to the buffer
-    buffer[next_request_index] = req;
-
-    // increment the index
-    next_request_index++;
-
-    pthread_mutex_unlock(&mutex_buffer);
-    sem_post(&buffer_full);
-}
-
-void *process(int i)
-{
-    char file_name[20];
-
-    sprintf(file_name, "Fiche_%d.txt", i);
-
-    FILE *f = fopen(file_name, "r");
-
-    if (f == NULL)
-    {
-        perror(strcat("Error opening file :", file_name));
-        exit(1);
-    }
-
+    Response resp;
     Instruction inst;
+    Liberation lib;
+
     while (fscanf(f, "%d,%d,%d,%d", &inst.type, &inst.resources.n_1, &inst.resources.n_2, &inst.resources.n_3) != EOF)
     {
         switch (inst.type)
         {
         case 1:
-            sleep(1);
+            sleep(WAIT_TIME);
+            printf("%d: \t\t\t normal\n", i + 1);
             break;
 
         case 2:
-            create_request(inst, i);
 
-            // sem_wait
+            printf("%d: \t\t\t demand : %d, %d, %d\n", i + 1, inst.resources.n_1, inst.resources.n_2, inst.resources.n_3);
+            req = (Request){i, 2, inst.resources};
+            send_request(req);
+            do
+            {
+                resp = get_response(i, response_msgid);
+            } while (!resp.is_available);
 
+            break;
+
+        case 3:
+            printf("%d: \t\t\t liberation : %d, %d, %d\n", i + 1, inst.resources.n_1, inst.resources.n_2, inst.resources.n_3);
+            lib = (Liberation){i, inst.resources};
+            send_liberation(lib, liberations_msgid[i]);
+            break;
+
+        case 4:
+            printf("%d: \t\t\t finish\n", i + 1);
+            req = (Request){i, 4, inst.resources};
+            send_request(req);
             break;
         }
     }
-
-    // Add to the buffer
 
     fclose(f);
     exit(0);
 }
 
-bool is_request_satisfied(ResourceList req, ResourceList res)
-{
-    return req.n_1 == res.n_1 && req.n_2 == res.n_2 && req.n_3 == res.n_3;
-}
-
-void *manager()
+void manager()
 {
     while (1)
     {
-        // Remove from the buffer
-        sem_wait(&buffer_full);
-        pthread_mutex_lock(&mutex_buffer);
-        // read the request from the buffer
-        next_request_index--;
-        Request req = buffer[next_request_index];
-
-        // clear the buffer
-        memset(&buffer[next_request_index], 0, sizeof(Request));
-
-        pthread_mutex_unlock(&mutex_buffer);
-        sem_post(&buffer_empty);
-
-        // handle request
-        sem_wait(&respone_empty);
-        // if the resources are available
-        bool is_available = false;
-        if (req.resources.n_1 <= resources.n_1 && req.resources.n_2 <= resources.n_2 && req.resources.n_3 <= resources.n_3)
+        sleep(WAIT_TIME);
+        // liberate resources
+        for (int i = 0; i < PROCESS_NUM - 1; i++)
         {
-            is_available = true;
-            // decrement the resources
-            resources.n_1 -= req.resources.n_1;
-            resources.n_2 -= req.resources.n_2;
-            resources.n_3 -= req.resources.n_3;
+            Liberation lib = get_liberation(liberations_msgid[i]);
 
-            // generate a response in FReponse
-        }
-        else
-        {
-            ResourceList available_resources = {0, 0, 0};
-            // take the resources that are availble
-            available_resources.n_1 = resources.n_1;
-            resources.n_1 = 0;
-            available_resources.n_2 = resources.n_2;
-            resources.n_2 = 0;
-            available_resources.n_3 = resources.n_3;
-            resources.n_3 = 0;
-
-            // take the resources that are needed from th blocked process and add them to the available resources
-            for (int i = 0; i < THREAD_NUM - 1; i++)
+            // if the message is empty
+            if (lib.id == -1)
             {
-                if (!process_statuses[i].is_active)
+                continue;
+            }
+
+            printf("M: \t\t %d liberates : %d, %d, %d\n", lib.id, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
+
+            resources.n_1 += lib.resources.n_1;
+            resources.n_2 += lib.resources.n_2;
+            resources.n_3 += lib.resources.n_3;
+
+            printf("M: \t\t resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
+
+            process_statuses[lib.id].resources.n_1 -= lib.resources.n_1;
+            process_statuses[lib.id].resources.n_2 -= lib.resources.n_2;
+            process_statuses[lib.id].resources.n_3 -= lib.resources.n_3;
+        }
+
+        Request req = get_request();
+
+        // if the process is finished
+        if (req.type == 4)
+        {
+            process_statuses[req.id].is_active = false;
+
+            bool still_active = false;
+
+            for (int i = 0; i < PROCESS_NUM - 1; i++)
+            {
+                if (process_statuses[i].is_active)
                 {
-                    if (available_resources.n_1 < req.resources.n_1 && requests[i].n_1 > 0)
-                    {
-                        available_resources.n_1 += requests[i].n_1;
-                        requests[i].n_1 += process_statuses[i].resources.n_1;
-                        process_statuses[i].resources.n_1 = 0;
-                    }
-                    else if (available_resources.n_2 < requests[i].n_2)
-                    {
-                        available_resources.n_1 -= requests[i].n_1;
-                        requests[i].n_1 = 0;
-                    }
-                    else if (available_resources.n_3 < requests[i].n_3)
-                    {
-                        available_resources.n_2 -= requests[i].n_2;
-                        requests[i].n_2 = 0;
-                    }
-                    else
-                    {
-                        available_resources.n_3 -= requests[i].n_3;
-                        requests[i].n_3 = 0;
-                    }
+                    still_active = true;
                 }
+            }
+
+            if (!still_active)
+            {
+                break;
             }
         }
 
-        if (is_available)
+        if (req.type == 2)
         {
-            // generate a positive response
-        }
-        else
-        {
-            // add the request to the requests array
-            requests[req.id] = req.resources;
-            // increment the time_blocked
-            process_statuses[req.id].time_blocked++;
+            // !this is yours ahmed.
         }
     }
 
-    // sem_post
-
-    // sem_wait
-
+    printf("M: \t\t finished\n");
     exit(0);
-}
-
-void init_message_queues()
-{
-    // initialize the process statuses array
-    for (int i = 0; i < THREAD_NUM - 1; i++)
-    {
-        process_statuses[i].is_active = true;
-        process_statuses[i].requistions_count = 0;
-        process_statuses[i].time_blocked = 0;
-    }
-
-    // initialize the requests array
-    for (int i = 0; i < THREAD_NUM - 1; i++)
-    {
-        requests[i].n_1 = 0;
-        requests[i].n_2 = 0;
-        requests[i].n_3 = 0;
-    }
-}
-
-void cleanup()
-{
-    sem_close(mutex_buffer);
-    // Close named semaphores
-    sem_close(buffer_empty);
-    sem_close(buffer_full);
-    sem_close(respone_empty);
-
-    // Unlink named semaphores
-    sem_unlink("/buffer_empty");
-    sem_unlink("/buffer_full");
-    sem_unlink("/respone_empty");
-}
-
-void init()
-{
-    init_semaphores();
-
-    init_mutexes();
-
-    init_message_queues();
 }
 
 int main(int argc, char *argv[])
 {
-
-    init();
-
-    for (int i = 0; i < THREAD_NUM; i++)
+    int choice;
+    do
     {
-        if (fork() == 0)
+
+        // clear the terminal
+        system("clear");
+
+        printf("Choose a test:\n");
+        printf("1. No resource request\n");
+        printf("2. One resource request with one liberation\n");
+        printf("3. One resource request with mulitple liberations\n");
+        printf("4. mulitple resource requests with one liberation\n");
+        printf("5. mulitple resource requests with mulitple liberations\n");
+        printf("0. Exit\n");
+
+        scanf("%d", &choice);
+
+        if (choice == 0)
+            break;
+
+        if (choice < 0 || choice > 5)
         {
-            if (i == THREAD_NUM - 1)
+            printf("Invalid choice\n");
+            continue;
+        }
+
+        init();
+
+        printf("Available resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
+
+        pid_t pids[PROCESS_NUM];
+
+        for (int i = 0; i < PROCESS_NUM; i++)
+        {
+            pids[i] = fork();
+
+            if (pids[i] == -1)
             {
-                manager();
+                perror("fork");
+                exit(1);
             }
-            else
+            
+            else if (pids[i] == 0)
             {
-                process(i);
+                if (i == PROCESS_NUM - 1)
+                {
+                    manager();
+                }
+                else
+                {
+                    char *file_name = get_file_path(choice, i);
+                    FILE *f = fopen(file_name, "r");
+
+                    if (f == NULL)
+                    {
+                        printf("Error opening file!\n");
+                        exit(1);
+                    }
+
+                    process(f, i);
+
+                    free(file_name);
+                }
             }
         }
-    }
 
-    for (int i = 0; i < THREAD_NUM; i++)
-    {
-        wait(NULL);
-    }
+        for (int i = 0; i < PROCESS_NUM; i++)
+        {
+            waitpid(pids[i], NULL, 0);
+            printf("process %d finished\n", i + 1);
+        }
 
-    cleanup();
+        cleanup();
 
+        printf("Done.\n\n");
+
+    } while (choice != 0);
     return 0;
 }
