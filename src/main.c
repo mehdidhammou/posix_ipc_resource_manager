@@ -14,7 +14,8 @@
 #include <fcntl.h>
 #include <string.h>
 #include "utils.h"
-
+#include <errno.h>
+#include <math.h>
 void process(FILE *f, int i)
 {
 
@@ -116,7 +117,72 @@ void manager()
 
         if (req.type == 2)
         {
-            // !this is yours ahmed.
+            ResourceList res = {0, 0, 0};
+
+            resources.n_1 -= req.resources.n_1;
+            resources.n_2 -= req.resources.n_2;
+            resources.n_3 -= req.resources.n_3;
+
+            res.n_1 = req.resources.n_1;
+            res.n_2 = req.resources.n_2;
+            res.n_3 = req.resources.n_3;
+
+            if (!is_request_satisfied(req.resources, res))
+            {
+                for (int i = 0; i < PROCESS_NUM - 1; i++)
+                {
+                    if (process_statuses[i].is_active)
+                        continue;
+
+                    if (req.resources.n_1 - res.n_1 > 0)
+                    {
+                        int needed = req.resources.n_1 - res.n_1;
+                        int available = process_statuses[i].resources.n_1;
+                        int taken = min(needed, available);
+                        res.n_1 += taken;
+                        process_statuses[i].resources.n_1 -= taken;
+                        process_requests[i].n_1 += taken;
+                    }
+
+                    if (req.resources.n_2 - res.n_2 > 0)
+                    {
+                        int needed = req.resources.n_2 - res.n_2;
+                        int available = process_statuses[i].resources.n_2;
+                        int taken = min(needed, available);
+                        res.n_2 += taken;
+                        process_statuses[i].resources.n_2 -= taken;
+                        process_requests[i].n_2 += taken;
+                    }
+
+                    if (req.resources.n_3 - res.n_3 > 0)
+                    {
+                        int needed = req.resources.n_3 - res.n_3;
+                        int available = process_statuses[i].resources.n_3;
+                        int taken = min(needed, available);
+                        res.n_3 += taken;
+                        process_statuses[i].resources.n_3 -= taken;
+                        process_requests[i].n_3 += taken;
+                    }
+
+                    if (is_request_satisfied(req.resources, res))
+                        break;
+                }
+            }
+
+            Response resp;
+            resp.id = req.id;
+            if (is_request_satisfied(req.resources, res))
+            {
+                resp.is_available = true;
+                printf("M: \t\t %d satisfied : %d, %d, %d\n", req.id + 1, res.n_1, res.n_2, res.n_3);
+            }
+            else
+            {
+                resp.is_available = false;
+                printf("M: \t\t %d not satisfied : %d, %d, %d\n", req.id + 1, res.n_1, res.n_2, res.n_3);
+            }
+
+            send_response(resp, response_msgid);
         }
     }
 
@@ -129,7 +195,6 @@ int main(int argc, char *argv[])
     int choice;
     do
     {
-
         // clear the terminal
         system("clear");
 
@@ -167,7 +232,7 @@ int main(int argc, char *argv[])
                 perror("fork");
                 exit(1);
             }
-            
+
             else if (pids[i] == 0)
             {
                 if (i == PROCESS_NUM - 1)

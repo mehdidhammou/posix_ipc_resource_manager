@@ -18,6 +18,10 @@
 #include <time.h>
 #include <errno.h>
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
+
+
 // test locations
 #define TEST_1 "./tests/no_dem"
 #define TEST_2 "./tests/one_dem_one_lib"
@@ -149,12 +153,9 @@ Request get_request()
 void send_response(Response resp, int response_msgid)
 {
     // send the response to the process
-    sem_wait(respone_empty);
-    int status = msgsnd(response_msgid, &resp, RESPONSE_SIZE, 0);
-    sem_post(respone_empty);
-
-    if (status == -1)
+    if (msgsnd(response_msgid, &resp, RESPONSE_SIZE, 0) == -1)
     {
+        printf("Problem in sending response\n");
         perror("msgsnd");
         exit(1);
     }
@@ -312,7 +313,7 @@ char *get_file_path(int choice, int i)
 {
     char file_name[10];
     sprintf(file_name, "%d.txt", i);
-    char *path = malloc(100 * sizeof(char));
+    char *path = (char *)malloc(100 * sizeof(char));
 
     switch (choice)
     {
