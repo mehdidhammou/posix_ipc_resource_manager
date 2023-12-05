@@ -32,20 +32,18 @@
 #define PROCESS_NUM 6
 #define BUFFER_SIZE 3
 #define WAIT_TIME 1
-#define RESPONSE_SIZE sizeof(Response)
-#define LIBERATION_SIZE sizeof(Liberation)
+#define RESPONSE_SIZE sizeof(Response) - sizeof(long)
+#define LIBERATION_SIZE sizeof(Liberation) - sizeof(long)
 
 // semaphore names
 #define BUFFER_EMPTY_SEM "/buffer_empty"
 #define BUFFER_FULL_SEM "/buffer_full"
-#define RESPONSE_EMPTY_SEM "/respone_empty"
 #define MUTEX_BUFFER_SEM "/mutex_buffer"
 
 // semaphores and mutexes
 sem_t *mutex_buffer;
 sem_t *buffer_empty;
 sem_t *buffer_full;
-sem_t *respone_empty;
 
 // structs
 typedef struct
@@ -92,13 +90,11 @@ typedef struct
 Request *buffer;
 
 // indices
-int *next_request_index;
+int *write_idx;
+int *read_idx;
 
 // array for requests that were not satisfied
 ResourceList process_requests[PROCESS_NUM - 1];
-
-// array for responses
-Response responses[PROCESS_NUM - 1];
 
 // array for the status of the processes
 Status process_statuses[PROCESS_NUM - 1];
@@ -108,22 +104,18 @@ ResourceList resources = {10, 10, 10};
 
 // message queues
 int liberations_msgid[PROCESS_NUM - 1];
-
-// message queue id of the response queue
 int response_msgid;
 
 void send_request(Request req)
 {
-    // !still not adhering to FIFO
-
     sem_wait(buffer_empty);
     sem_wait(mutex_buffer);
 
-    // add to the buffer
-    buffer[*next_request_index] = req;
+    // write the request to the buffer
+    buffer[*write_idx] = req;
 
-    // increment the index
-    (*next_request_index)++;
+    // increment the write index and wrap around if needed
+    (*write_idx) = ((*write_idx) + 1) % BUFFER_SIZE;
 
     sem_post(mutex_buffer);
     sem_post(buffer_full);
@@ -137,11 +129,10 @@ Request get_request()
     sem_wait(mutex_buffer);
 
     // read the request from the buffer
-    (*next_request_index)--;
-    req = buffer[*next_request_index];
+    req = buffer[*read_idx];
 
-    // clear the buffer slot
-    memset(&buffer[*next_request_index], 0, sizeof(Request));
+    // increment the read index and wrap around if needed
+    (*read_idx) = ((*read_idx) + 1) % BUFFER_SIZE;
 
     sem_post(mutex_buffer);
     sem_post(buffer_empty);
@@ -154,6 +145,7 @@ void send_response(Response resp, int response_msgid)
     // send the response to the process
     if (msgsnd(response_msgid, &resp, RESPONSE_SIZE, 0) == -1)
     {
+        printf("error from send_response, process %ld\n", resp.id);
         perror("msgsnd");
         exit(1);
     }
@@ -181,6 +173,7 @@ void send_liberation(Liberation lib, int liberations_msgid)
     // send the liberation to the manager
     if (msgsnd(liberations_msgid, &lib, LIBERATION_SIZE, 0) == -1)
     {
+        printf("error from send_liberation, process %d\n", lib.id);
         perror("msgsnd");
         exit(1);
     }
@@ -205,14 +198,22 @@ Liberation get_liberation(int liberations_msgid)
     return lib;
 }
 
+void init_arrays()
+{
+    for (int i = 0; i < PROCESS_NUM - 1; i++)
+    {
+        process_requests[i] = (ResourceList){0, 0, 0};
+        process_statuses[i] = (Status){true, (ResourceList){0, 0, 0}, 0, 0};
+    }
+}
+
 void init_semaphores()
 {
     // Initialize named semaphores
     buffer_empty = sem_open(BUFFER_EMPTY_SEM, O_CREAT, 0644, BUFFER_SIZE);
     buffer_full = sem_open(BUFFER_FULL_SEM, O_CREAT, 0644, 0);
-    respone_empty = sem_open(RESPONSE_EMPTY_SEM, O_CREAT, 0644, 1);
 
-    if (buffer_empty == SEM_FAILED || buffer_full == SEM_FAILED || respone_empty == SEM_FAILED)
+    if (buffer_empty == SEM_FAILED || buffer_full == SEM_FAILED)
     {
         perror("sem_open");
         exit(EXIT_FAILURE);
@@ -276,24 +277,43 @@ void share_memory()
         exit(1);
     }
 
-    // share memory for next_request_index
-    int next_request_index_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
+    // share memory for write_idx
+    int write_idx_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
 
-    if (next_request_index_id == -1)
+    if (write_idx_id == -1)
     {
         perror("shmget");
         exit(1);
     }
 
-    next_request_index = (int *)shmat(next_request_index_id, NULL, 0);
+    write_idx = (int *)shmat(write_idx_id, NULL, 0);
 
-    if (next_request_index == (void *)-1)
+    if (write_idx == (void *)-1)
     {
         perror("shmat");
         exit(1);
     }
 
-    *next_request_index = 0;
+    *write_idx = 0;
+
+    // share memory for read_idx
+    int read_idx_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
+
+    if (read_idx_id == -1)
+    {
+        perror("shmget");
+        exit(1);
+    }
+
+    read_idx = (int *)shmat(read_idx_id, NULL, 0);
+
+    if (read_idx == (void *)-1)
+    {
+        perror("shmat");
+        exit(1);
+    }
+
+    *read_idx = 0;
 
     printf("shared memory initialized\n");
 }
@@ -348,13 +368,11 @@ void cleanup()
     // Close all named semaphores
     sem_close(buffer_empty);
     sem_close(buffer_full);
-    sem_close(respone_empty);
     sem_close(mutex_buffer);
 
     // Unlink named semaphores
     sem_unlink(BUFFER_EMPTY_SEM);
     sem_unlink(BUFFER_FULL_SEM);
-    sem_unlink(RESPONSE_EMPTY_SEM);
     sem_unlink(MUTEX_BUFFER_SEM);
 
     // cleanup message queues
@@ -373,18 +391,17 @@ void cleanup()
     // Clear the buffer memory
     shmdt(buffer);
 
+    shmdt(write_idx);
+    shmdt(read_idx);
+
     // Clear the arrays
     memset(process_requests, 0, sizeof(process_requests));
-    memset(responses, 0, sizeof(responses));
     memset(process_statuses, 0, sizeof(process_statuses));
 
     // Reset the resources
     resources.n_1 = 10;
     resources.n_2 = 10;
     resources.n_3 = 10;
-
-    // Clear the indices
-    shmdt(next_request_index);
 
     printf("Cleanup done.\n");
 }

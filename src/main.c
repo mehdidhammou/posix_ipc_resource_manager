@@ -16,6 +16,16 @@
 #include "utils.h"
 #include <errno.h>
 #include <math.h>
+#include <signal.h>
+
+volatile sig_atomic_t g_terminate = false;
+
+void sigint_handler(int sig)
+{
+    g_terminate = true;
+    cleanup();
+    exit(0);
+}
 
 void process(FILE *f, int i)
 {
@@ -31,12 +41,10 @@ void process(FILE *f, int i)
         {
         case 1:
             sleep(WAIT_TIME);
-            printf("%d: \t\t\t normal\n", i + 1);
             break;
 
         case 2:
 
-            printf("%d: \t\t\t demand : %d, %d, %d\n", i + 1, inst.resources.n_1, inst.resources.n_2, inst.resources.n_3);
             req = (Request){i, 2, inst.resources};
             send_request(req);
             do
@@ -103,9 +111,10 @@ void manager()
 
         Request req = get_request();
 
-        // if the process is finished
+        // if the process is get_re
         if (req.type == 4)
         {
+            printf("M: \t\t %d finished\n", req.id + 1);
             process_statuses[req.id].is_active = false;
 
             bool still_active = false;
@@ -144,6 +153,7 @@ void manager()
 
         if (req.type == 2)
         {
+            printf("M: \t\t %d requests : %d, %d, %d\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
             Response resp = get_resources(req);
 
             if (!resp.is_available)
@@ -159,7 +169,7 @@ void manager()
             else
             {
                 process_requests[req.id] = (ResourceList){0, 0, 0};
-                
+
                 printf("M: \t\t %d S: %d, %d, %d\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
             }
 
@@ -172,6 +182,7 @@ void manager()
 
 int main(int argc, char *argv[])
 {
+    signal(SIGINT, sigint_handler);
     int choice;
     do
     {
