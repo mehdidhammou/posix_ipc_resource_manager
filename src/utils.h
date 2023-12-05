@@ -80,7 +80,7 @@ typedef struct
 
 typedef struct
 {
-    bool is_active;
+    int state;
     ResourceList resources;
     int requistions_count;
     int time_blocked;
@@ -203,7 +203,7 @@ void init_arrays()
     for (int i = 0; i < PROCESS_NUM - 1; i++)
     {
         process_requests[i] = (ResourceList){0, 0, 0};
-        process_statuses[i] = (Status){true, (ResourceList){0, 0, 0}, 0, 0};
+        process_statuses[i] = (Status){1, (ResourceList){0, 0, 0}, 0, 0};
     }
 }
 
@@ -323,6 +323,7 @@ void init()
     srand(time(NULL));
     init_semaphores();
     init_mutexes();
+    init_arrays();
     init_message_queues();
     share_memory();
 }
@@ -412,7 +413,7 @@ bool check_availability(Request req, ResourceList res)
 
     for (int i = 0; i < PROCESS_NUM - 1; i++)
     {
-        if (process_statuses[i].is_active)
+        if (process_statuses[i].state != 0)
             continue;
 
         if (req.resources.n_1 - gathered.n_1 > 0)
@@ -452,7 +453,7 @@ void gather_resources(Request req, ResourceList res)
 
     for (int i = 0; i < PROCESS_NUM - 1; i++)
     {
-        if (process_statuses[i].is_active)
+        if (process_statuses[i].state != 0)
             continue;
 
         bool has_taken = false;

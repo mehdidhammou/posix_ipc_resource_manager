@@ -74,12 +74,13 @@ void process(FILE *f, int i)
 
 void manager()
 {
-    while (true)
+    int active_processes = PROCESS_NUM - 1;
+    while (active_processes > 0)
     {
         // increment blocked_time
         for (int i = 0; i < PROCESS_NUM - 1; i++)
         {
-            if (process_statuses[i].is_active)
+            if (process_statuses[i].state != 0)
                 continue;
 
             process_statuses[i].time_blocked++;
@@ -107,48 +108,37 @@ void manager()
             process_statuses[lib.id].resources.n_1 -= lib.resources.n_1;
             process_statuses[lib.id].resources.n_2 -= lib.resources.n_2;
             process_statuses[lib.id].resources.n_3 -= lib.resources.n_3;
-        }
-
-        Request req = get_request();
-
-        // if the process is get_re
-        if (req.type == 4)
-        {
-            printf("M: \t\t %d finished\n", req.id + 1);
-            process_statuses[req.id].is_active = false;
-
-            bool still_active = false;
-
-            for (int i = 0; i < PROCESS_NUM - 1; i++)
-            {
-                if (process_statuses[i].is_active)
-                {
-                    still_active = true;
-                }
-            }
-
-            if (!still_active)
-                break;
 
             // find the process with the highest priority
             int max_priority_index = -1;
             int max_priority = -1;
             for (int i = 0; i < PROCESS_NUM - 1; i++)
             {
-                if (!process_statuses[i].is_active)
+                if (process_statuses[i].state != 0)
+                    continue;
+
+                int priority = process_statuses[i].time_blocked + 5 * process_statuses[i].requistions_count;
+                if (priority > max_priority)
                 {
-                    int priority = process_statuses[i].time_blocked + 5 * process_statuses[i].requistions_count;
-                    if (priority > max_priority)
-                    {
-                        max_priority = priority;
-                        max_priority_index = i;
-                    }
+                    max_priority = priority;
+                    max_priority_index = i;
                 }
             }
 
             Request req = {max_priority_index, 2, process_statuses[max_priority_index].resources};
 
             send_request(req);
+        }
+
+        Request req = get_request();
+
+        // if the process is
+        if (req.type == 4)
+        {
+            printf("M: \t\t %d finished\n", req.id + 1);
+            process_statuses[req.id].state = -1;
+
+            active_processes--;
         }
 
         if (req.type == 2)
@@ -158,7 +148,7 @@ void manager()
 
             if (!resp.is_available)
             {
-                process_statuses[req.id].is_active = false;
+                process_statuses[req.id].state = 0;
 
                 process_requests[req.id].n_1 += req.resources.n_1;
                 process_requests[req.id].n_2 += req.resources.n_2;
