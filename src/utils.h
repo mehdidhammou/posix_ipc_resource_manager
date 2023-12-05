@@ -21,7 +21,6 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
-
 // test locations
 #define TEST_1 "./tests/no_dem"
 #define TEST_2 "./tests/one_dem_one_lib"
@@ -155,7 +154,6 @@ void send_response(Response resp, int response_msgid)
     // send the response to the process
     if (msgsnd(response_msgid, &resp, RESPONSE_SIZE, 0) == -1)
     {
-        printf("Problem in sending response\n");
         perror("msgsnd");
         exit(1);
     }
@@ -389,6 +387,141 @@ void cleanup()
     shmdt(next_request_index);
 
     printf("Cleanup done.\n");
+}
+
+bool check_availability(Request req, ResourceList res)
+{
+    ResourceList gathered = res;
+
+    for (int i = 0; i < PROCESS_NUM - 1; i++)
+    {
+        if (process_statuses[i].is_active)
+            continue;
+
+        if (req.resources.n_1 - gathered.n_1 > 0)
+        {
+            int needed = req.resources.n_1 - gathered.n_1;
+            int available = process_statuses[i].resources.n_1;
+            int taken = min(needed, available);
+            gathered.n_1 += taken;
+        }
+
+        if (req.resources.n_2 - gathered.n_2 > 0)
+        {
+            int needed = req.resources.n_2 - gathered.n_2;
+            int available = process_statuses[i].resources.n_2;
+            int taken = min(needed, available);
+            gathered.n_2 += taken;
+        }
+
+        if (req.resources.n_3 - gathered.n_3 > 0)
+        {
+            int needed = req.resources.n_3 - gathered.n_3;
+            int available = process_statuses[i].resources.n_3;
+            int taken = min(needed, available);
+            gathered.n_3 += taken;
+        }
+
+        if (is_request_satisfied(req.resources, gathered))
+            return true;
+    }
+
+    return false;
+}
+
+void gather_resources(Request req, ResourceList res)
+{
+    ResourceList gathered = res;
+
+    for (int i = 0; i < PROCESS_NUM - 1; i++)
+    {
+        if (process_statuses[i].is_active)
+            continue;
+
+        bool has_taken = false;
+
+        if (req.resources.n_1 - gathered.n_1 > 0)
+        {
+            has_taken = true;
+
+            int needed = req.resources.n_1 - gathered.n_1;
+            int available = process_statuses[i].resources.n_1;
+            int taken = min(needed, available);
+
+            gathered.n_1 += taken;
+            process_statuses[i].resources.n_1 -= taken;
+            process_requests[i].n_1 += taken;
+        }
+
+        if (req.resources.n_2 - gathered.n_2 > 0)
+        {
+            has_taken = true;
+
+            int needed = req.resources.n_2 - gathered.n_2;
+            int available = process_statuses[i].resources.n_2;
+            int taken = min(needed, available);
+
+            gathered.n_2 += taken;
+            process_statuses[i].resources.n_2 -= taken;
+            process_requests[i].n_2 += taken;
+        }
+
+        if (req.resources.n_3 - gathered.n_3 > 0)
+        {
+            has_taken = true;
+
+            int needed = req.resources.n_3 - gathered.n_3;
+            int available = process_statuses[i].resources.n_3;
+            int taken = min(needed, available);
+
+            gathered.n_3 += taken;
+            process_statuses[i].resources.n_3 -= taken;
+            process_requests[i].n_3 += taken;
+        }
+
+        if (has_taken)
+            process_statuses[i].requistions_count++;
+
+        if (is_request_satisfied(req.resources, gathered))
+            break;
+    }
+}
+
+Response get_resources(Request req)
+{
+    Response resp;
+    resp.id = req.id;
+    resp.is_available = false;
+
+    if (req.resources.n_1 <= resources.n_1 && req.resources.n_2 <= resources.n_2 <= req.resources.n_3 <= resources.n_3)
+    {
+        resp.is_available = true;
+
+        resources.n_1 -= req.resources.n_1;
+        resources.n_2 -= req.resources.n_2;
+        resources.n_3 -= req.resources.n_3;
+    }
+    else
+    {
+        ResourceList res = {0, 0, 0};
+
+        res.n_1 = min(resources.n_1, req.resources.n_1);
+        res.n_2 = min(resources.n_2, req.resources.n_2);
+        res.n_3 = min(resources.n_3, req.resources.n_3);
+
+        if (check_availability(req, res))
+        {
+            gather_resources(req, res);
+
+            resp.is_available = true;
+
+            resources.n_1 -= res.n_1;
+            resources.n_2 -= res.n_2;
+            resources.n_3 -= res.n_3;
+        }
+    }
+
+    return resp;
 }
 
 #endif

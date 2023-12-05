@@ -16,6 +16,7 @@
 #include "utils.h"
 #include <errno.h>
 #include <math.h>
+
 void process(FILE *f, int i)
 {
 
@@ -52,7 +53,7 @@ void process(FILE *f, int i)
             break;
 
         case 4:
-            printf("%d: \t\t\t finish\n", i + 1);
+            printf("\t%d: \t finish\n", i + 1);
             req = (Request){i, 4, inst.resources};
             send_request(req);
             break;
@@ -65,9 +66,19 @@ void process(FILE *f, int i)
 
 void manager()
 {
-    while (1)
+    while (true)
     {
+        // increment blocked_time
+        for (int i = 0; i < PROCESS_NUM - 1; i++)
+        {
+            if (process_statuses[i].is_active)
+                continue;
+
+            process_statuses[i].time_blocked++;
+        }
+
         sleep(WAIT_TIME);
+
         // liberate resources
         for (int i = 0; i < PROCESS_NUM - 1; i++)
         {
@@ -75,11 +86,9 @@ void manager()
 
             // if the message is empty
             if (lib.id == -1)
-            {
                 continue;
-            }
 
-            printf("M: \t\t %d liberates : %d, %d, %d\n", lib.id, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
+            printf("M: \t\t %d liberates : %d, %d, %d\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
 
             resources.n_1 += lib.resources.n_1;
             resources.n_2 += lib.resources.n_2;
@@ -110,83 +119,54 @@ void manager()
             }
 
             if (!still_active)
-            {
                 break;
+
+            // find the process with the highest priority
+            int max_priority_index = -1;
+            int max_priority = -1;
+            for (int i = 0; i < PROCESS_NUM - 1; i++)
+            {
+                if (!process_statuses[i].is_active)
+                {
+                    int priority = process_statuses[i].time_blocked + 5 * process_statuses[i].requistions_count;
+                    if (priority > max_priority)
+                    {
+                        max_priority = priority;
+                        max_priority_index = i;
+                    }
+                }
             }
+
+            Request req = {max_priority_index, 2, process_statuses[max_priority_index].resources};
+
+            send_request(req);
         }
 
         if (req.type == 2)
         {
-            ResourceList res = {0, 0, 0};
+            Response resp = get_resources(req);
 
-            resources.n_1 -= req.resources.n_1;
-            resources.n_2 -= req.resources.n_2;
-            resources.n_3 -= req.resources.n_3;
-
-            res.n_1 = req.resources.n_1;
-            res.n_2 = req.resources.n_2;
-            res.n_3 = req.resources.n_3;
-
-            if (!is_request_satisfied(req.resources, res))
+            if (!resp.is_available)
             {
-                for (int i = 0; i < PROCESS_NUM - 1; i++)
-                {
-                    if (process_statuses[i].is_active)
-                        continue;
+                process_statuses[req.id].is_active = false;
 
-                    if (req.resources.n_1 - res.n_1 > 0)
-                    {
-                        int needed = req.resources.n_1 - res.n_1;
-                        int available = process_statuses[i].resources.n_1;
-                        int taken = min(needed, available);
-                        res.n_1 += taken;
-                        process_statuses[i].resources.n_1 -= taken;
-                        process_requests[i].n_1 += taken;
-                    }
+                process_requests[req.id].n_1 += req.resources.n_1;
+                process_requests[req.id].n_2 += req.resources.n_2;
+                process_requests[req.id].n_3 += req.resources.n_3;
 
-                    if (req.resources.n_2 - res.n_2 > 0)
-                    {
-                        int needed = req.resources.n_2 - res.n_2;
-                        int available = process_statuses[i].resources.n_2;
-                        int taken = min(needed, available);
-                        res.n_2 += taken;
-                        process_statuses[i].resources.n_2 -= taken;
-                        process_requests[i].n_2 += taken;
-                    }
-
-                    if (req.resources.n_3 - res.n_3 > 0)
-                    {
-                        int needed = req.resources.n_3 - res.n_3;
-                        int available = process_statuses[i].resources.n_3;
-                        int taken = min(needed, available);
-                        res.n_3 += taken;
-                        process_statuses[i].resources.n_3 -= taken;
-                        process_requests[i].n_3 += taken;
-                    }
-
-                    if (is_request_satisfied(req.resources, res))
-                        break;
-                }
-            }
-
-            Response resp;
-            resp.id = req.id;
-            if (is_request_satisfied(req.resources, res))
-            {
-                resp.is_available = true;
-                printf("M: \t\t %d satisfied : %d, %d, %d\n", req.id + 1, res.n_1, res.n_2, res.n_3);
+                printf("M: \t\t %d !S: %d, %d, %d\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
             }
             else
             {
-                resp.is_available = false;
-                printf("M: \t\t %d not satisfied : %d, %d, %d\n", req.id + 1, res.n_1, res.n_2, res.n_3);
+                process_requests[req.id] = (ResourceList){0, 0, 0};
+                
+                printf("M: \t\t %d S: %d, %d, %d\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
             }
 
             send_response(resp, response_msgid);
         }
     }
-
-    printf("M: \t\t finished\n");
+    printf("\tM: \t finished\n");
     exit(0);
 }
 
@@ -195,9 +175,7 @@ int main(int argc, char *argv[])
     int choice;
     do
     {
-        // clear the terminal
         system("clear");
-
         printf("Choose a test:\n");
         printf("1. No resource request\n");
         printf("2. One resource request with one liberation\n");
@@ -238,6 +216,7 @@ int main(int argc, char *argv[])
                 if (i == PROCESS_NUM - 1)
                 {
                     manager();
+                    printf("M: \t finished from main\n");
                 }
                 else
                 {
@@ -251,7 +230,6 @@ int main(int argc, char *argv[])
                     }
 
                     process(f, i);
-
                     free(file_name);
                 }
             }
@@ -260,7 +238,6 @@ int main(int argc, char *argv[])
         for (int i = 0; i < PROCESS_NUM; i++)
         {
             waitpid(pids[i], NULL, 0);
-            printf("process %d finished\n", i + 1);
         }
 
         cleanup();
