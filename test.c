@@ -17,21 +17,42 @@
 #include <math.h>
 #include <signal.h>
 
-#define n 10
-
 typedef struct
 {
-    int id;
+    long id;
     int type;
-} Test;
+    int result;
+} Response;
 
-Test T[10];
+#define RESPONSE_SIZE sizeof(Response)
+void send_response(Response resp, int response_msgid)
+{
+    // send the response to the process
+    printf("arguments : %ld, %ld\n", resp.id, RESPONSE_SIZE);
+    if (msgsnd(response_msgid, &resp, RESPONSE_SIZE, 0) == -1)
+    {
+        printf("error from send_response, process %ld\n", resp.id);
+        perror("msgsnd");
+        exit(1);
+    }
+}
+
+Response get_response(int i, int response_msgid)
+{
+    Response resp;
+    if (msgrcv(response_msgid, &resp, RESPONSE_SIZE, i, 0) == -1)
+    {
+        perror("msgrcv");
+        exit(1);
+    }
+
+    return resp;
+}
 
 int main()
 {
-
-    for (int i = 0; i < n; i++)
-    {
-        printf("%d, %d\n", T[i].id, T[i].type);
-    }
+    // fork 5 processes and send a message, and 1 process to receive the message
+    printf("start time : %ld\n", time(NULL) - time(NULL));
+    
+    return 0;
 }
