@@ -18,38 +18,22 @@
 #include <math.h>
 #include <signal.h>
 
-pid_t pids[PROCESS_NUM];
-
 void sigint_handler(int sig)
 {
     cleanup();
     exit(0);
 }
 
-volatile sig_atomic_t still_active = 1;
-
 void blocked_time_handler(int sig)
 {
     int active_processes = 0;
     for (int i = 0; i < PROCESS_NUM - 1; i++)
     {
-        if (process_statuses[i].state != -1)
-        {
-            active_processes++;
-        }
-
         if (process_statuses[i].state == 0)
         {
             process_statuses[i].time_blocked++;
         }
     }
-
-    if (active_processes == 0)
-    {
-        printf("All processes are blocked\n");
-        still_active = 0;
-    }
-
     alarm(WAIT_TIME);
 }
 
@@ -220,6 +204,8 @@ int main(int argc, char *argv[])
         init();
 
         alarm(WAIT_TIME);
+
+        pid_t pids[PROCESS_NUM];
 
         printf("Available resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
 
