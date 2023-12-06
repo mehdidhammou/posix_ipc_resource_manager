@@ -25,6 +25,8 @@ void send_request(Request req)
     // write the request to the buffer
     buffer[*write_idx] = req;
 
+    printf("M %d requests %d %d %d\n", buffer[*write_idx].id, buffer[*write_idx].resources.n_1, buffer[*write_idx].resources.n_2, buffer[*write_idx].resources.n_3);
+
     // increment the write index and wrap around if needed
     (*write_idx) = ((*write_idx) + 1) % BUFFER_SIZE;
 
@@ -43,6 +45,17 @@ Request get_request()
 
         // read the request from the buffer
         req = buffer[*read_idx];
+
+        switch (req.type)
+        {
+        case 2:
+            printf("M: %d requests %d %d %d\n", req.id, req.resources.n_1, req.resources.n_2, req.resources.n_3);
+            break;
+
+        case 4:
+            printf("%d finished\n", req.id);
+            break;
+        }
 
         // increment the read index and wrap around if needed
         (*read_idx) = ((*read_idx) + 1) % BUFFER_SIZE;
@@ -146,7 +159,7 @@ void cleanup_semaphores()
     sem_unlink(BUFFER_FULL_SEM);
     sem_unlink(MUTEX_BUFFER_SEM);
 
-    printf("Semaphores cleared");
+    printf("Semaphores cleared.\n");
 }
 
 void cleanup_shared_memory()
@@ -155,7 +168,7 @@ void cleanup_shared_memory()
     shmdt(write_idx);
     shmdt(read_idx);
 
-    printf("Shared memory cleared");
+    printf("Shared memory cleared.\n");
 }
 
 #endif

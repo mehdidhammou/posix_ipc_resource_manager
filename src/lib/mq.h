@@ -40,7 +40,7 @@ void init_message_queues()
 void send_response(Response resp, int response_msgid)
 {
     // send the response to the process
-    printf("arguments : %ld, %ld\n", resp.id, RESPONSE_SIZE);
+    resp.id++;
     if (msgsnd(response_msgid, &resp, RESPONSE_SIZE, 0) == -1)
     {
         printf("error from send_response, process %ld\n", resp.id);
@@ -57,12 +57,14 @@ Response get_response(int i, int response_msgid)
         perror("msgrcv");
         exit(1);
     }
-
+    resp.id--;
     return resp;
 }
 
 void send_liberation(Liberation lib, int liberations_msgid)
 {
+    printf("%ld liberates : %d, %d, %d\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
+    lib.id++;
     if (msgsnd(liberations_msgid, &lib, LIBERATION_SIZE, 0) == -1)
     {
         printf("error from send_liberation, process %ld\n", lib.id);
@@ -73,7 +75,7 @@ void send_liberation(Liberation lib, int liberations_msgid)
 
 Liberation get_liberation(int liberations_msgid)
 {
-    Liberation lib = {.id = -1, .resources = {0, 0, 0}};
+    Liberation lib;
     if (msgrcv(liberations_msgid, &lib, LIBERATION_SIZE, 0, IPC_NOWAIT) == -1)
     {
         if (errno != ENOMSG)
@@ -81,8 +83,16 @@ Liberation get_liberation(int liberations_msgid)
             perror("msgrcv");
             exit(1);
         }
+        else
+        {
+            lib.id = -1;
+        }
     }
-
+    else
+    {
+        lib.id--;
+        printf("M: \t\t %ld liberates : %d, %d, %d\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
+    }
     return lib;
 }
 

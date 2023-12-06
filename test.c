@@ -25,10 +25,10 @@ typedef struct
 } Response;
 
 #define RESPONSE_SIZE sizeof(Response)
+
 void send_response(Response resp, int response_msgid)
 {
     // send the response to the process
-    printf("arguments : %ld, %ld\n", resp.id, RESPONSE_SIZE);
     if (msgsnd(response_msgid, &resp, RESPONSE_SIZE, 0) == -1)
     {
         printf("error from send_response, process %ld\n", resp.id);
@@ -51,8 +51,51 @@ Response get_response(int i, int response_msgid)
 
 int main()
 {
-    // fork 5 processes and send a message, and 1 process to receive the message
-    printf("start time : %ld\n", time(NULL) - time(NULL));
-    
+    // fork 5 processes that send a message , and 1 process that prints them
+    int response_msgid;
+
+    key_t key = ftok("test.c", 1);
+
+    response_msgid = msgget(key, 0644 | IPC_CREAT);
+    if (response_msgid == -1)
+    {
+        perror("msgget response");
+        exit(1);
+    }
+
+    pid_t pids[5];
+    for (int i = 0; i < 5; i++)
+    {
+        sleep(1);
+        pids[i] = fork();
+        if (pids[i] == 0)
+        {
+            Response resp = {i, 1, 0};
+            send_response(resp, response_msgid);
+            exit(0);
+        }
+    }
+
+    // wait for all processes to finish
+    for (int i = 0; i < 5; i++)
+    {
+        wait(NULL);
+    }
+
+    Response resp;
+    for (int i = 0; i < 5; i++)
+    {
+        double id = (double)i;
+
+        resp = get_response(id, response_msgid);
+        printf("response from process %ld\n", resp.id);
+    }
+
+    // destroy message queues
+    if (msgctl(response_msgid, IPC_RMID, NULL) == -1)
+    {
+        perror("msgctl");
+        exit(1);
+    }
     return 0;
 }

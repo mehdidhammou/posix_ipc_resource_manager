@@ -1,9 +1,6 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-#include <time.h>
-
-
 typedef struct
 {
     int n_1;

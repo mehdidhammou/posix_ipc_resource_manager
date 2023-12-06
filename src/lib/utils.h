@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include "types.h"
 #include "consts.h"

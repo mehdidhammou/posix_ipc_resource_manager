@@ -27,24 +27,20 @@ void process(int choice, int i)
             break;
 
         case 2:
-
-            req = (Request){i, 2, inst.resources};
+            req = (Request){i, inst.type, inst.resources};
             send_request(req);
             resp = get_response(i, response_msgid);
             if (!resp.is_available)
                 resp = get_response(i, response_msgid);
-
             break;
 
         case 3:
-            printf("%d: \t\t\t liberation : %d, %d, %d\n", i + 1, inst.resources.n_1, inst.resources.n_2, inst.resources.n_3);
             lib = (Liberation){i, inst.resources};
             send_liberation(lib, liberation_msgids[i]);
             break;
 
         case 4:
-            printf("\t%d: \t finish\n", i + 1);
-            req = (Request){i, 4, inst.resources};
+            req = (Request){i, inst.type, inst.resources};
             send_request(req);
             break;
         }
@@ -65,8 +61,6 @@ void manager()
 
         if (req.type == 4)
         {
-            printf("M: \t\t %d finished\n", req.id + 1);
-
             process_statuses[req.id].state = -1;
 
             resources.n_1 += process_statuses[req.id].resources.n_1;
@@ -79,22 +73,9 @@ void manager()
         if (req.type == 2)
         {
 
-            // check liberation queues for available resources
-            printf("M: \t\t %d requests : %d, %d, %d\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
             Response resp = get_resources(req);
 
-            if (!resp.is_available)
-            {
-                block_process(req.id, req);
-
-                printf("M: \t\t %d !S: %d, %d, %d\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
-            }
-            else
-            {
-                activate_process(req.id);
-
-                printf("M: \t\t %d S: %d, %d, %d\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
-            }
+            (resp.is_available) ? activate_process(req.id) : block_process(req.id, req);
 
             send_response(resp, response_msgid);
         }
