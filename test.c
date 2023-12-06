@@ -27,11 +27,11 @@ typedef struct
 
 Test T[10];
 
+int main()
+{
 
-
-int main(){
-
-    for(int i = 0; i < n; i++){
+    for (int i = 0; i < n; i++)
+    {
         printf("%d, %d\n", T[i].id, T[i].type);
     }
 }

@@ -74,7 +74,7 @@ typedef struct
 
 typedef struct
 {
-    int id;
+    long id;
     ResourceList resources;
 } Liberation;
 
@@ -143,6 +143,7 @@ Request get_request()
 void send_response(Response resp, int response_msgid)
 {
     // send the response to the process
+    printf("arguments : %ld, %ld\n", resp.id, RESPONSE_SIZE);
     if (msgsnd(response_msgid, &resp, RESPONSE_SIZE, 0) == -1)
     {
         printf("error from send_response, process %ld\n", resp.id);
@@ -173,7 +174,7 @@ void send_liberation(Liberation lib, int liberations_msgid)
     // send the liberation to the manager
     if (msgsnd(liberations_msgid, &lib, LIBERATION_SIZE, 0) == -1)
     {
-        printf("error from send_liberation, process %d\n", lib.id);
+        printf("error from send_liberation, process %ld\n", lib.id);
         perror("msgsnd");
         exit(1);
     }
@@ -196,6 +197,30 @@ Liberation get_liberation(int liberations_msgid)
     }
 
     return lib;
+}
+
+void check_liberation_queues()
+{
+    for (int i = 0; i < PROCESS_NUM - 1; i++)
+    {
+        Liberation lib = get_liberation(liberations_msgid[i]);
+
+        // if the message is empty
+        if (lib.id == -1)
+            continue;
+
+        printf("M: \t\t %ld liberates : %d, %d, %d\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
+
+        resources.n_1 += lib.resources.n_1;
+        resources.n_2 += lib.resources.n_2;
+        resources.n_3 += lib.resources.n_3;
+
+        printf("M: \t\t resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
+
+        process_statuses[lib.id].resources.n_1 -= lib.resources.n_1;
+        process_statuses[lib.id].resources.n_2 -= lib.resources.n_2;
+        process_statuses[lib.id].resources.n_3 -= lib.resources.n_3;
+    }
 }
 
 void init_arrays()
@@ -540,6 +565,22 @@ Response get_resources(Request req)
     }
 
     return resp;
+}
+
+void activate_process(int i)
+{
+    process_statuses[i].state = 1;
+    process_statuses[i].time_blocked = 0;
+    process_statuses[i].requistions_count = 0;
+    process_requests[i] = (ResourceList){0, 0, 0};
+}
+
+void block_process(int i, Request req)
+{
+    process_statuses[i].state = 0;
+    process_statuses[i].resources.n_1 += req.resources.n_1;
+    process_statuses[i].resources.n_2 += req.resources.n_2;
+    process_statuses[i].resources.n_3 += req.resources.n_3;
 }
 
 #endif

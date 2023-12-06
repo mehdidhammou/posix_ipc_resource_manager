@@ -18,17 +18,52 @@
 #include <math.h>
 #include <signal.h>
 
-volatile sig_atomic_t g_terminate = false;
+pid_t pids[PROCESS_NUM];
 
 void sigint_handler(int sig)
 {
-    g_terminate = true;
     cleanup();
     exit(0);
 }
 
-void process(FILE *f, int i)
+volatile sig_atomic_t still_active = 1;
+
+void blocked_time_handler(int sig)
 {
+    int active_processes = 0;
+    for (int i = 0; i < PROCESS_NUM - 1; i++)
+    {
+        if (process_statuses[i].state != -1)
+        {
+            active_processes++;
+        }
+
+        if (process_statuses[i].state == 0)
+        {
+            process_statuses[i].time_blocked++;
+        }
+    }
+
+    if (active_processes == 0)
+    {
+        printf("All processes are blocked\n");
+        still_active = 0;
+    }
+
+    alarm(WAIT_TIME);
+}
+
+void process(int choice, int i)
+{
+
+    char *file_name = get_file_path(choice, i);
+    FILE *f = fopen(file_name, "r");
+
+    if (f == NULL)
+    {
+        printf("Error opening file!\n");
+        exit(1);
+    }
 
     Request req;
     Response resp;
@@ -69,96 +104,81 @@ void process(FILE *f, int i)
     }
 
     fclose(f);
+    free(file_name);
     exit(0);
 }
 
 void manager()
 {
+    sleep(WAIT_TIME);
     int active_processes = PROCESS_NUM - 1;
     while (active_processes > 0)
     {
-        // increment blocked_time
+        check_liberation_queues();
+
+        int checked_procs[PROCESS_NUM - 1] = {0};
         for (int i = 0; i < PROCESS_NUM - 1; i++)
         {
-            if (process_statuses[i].state != 0)
-                continue;
-
-            process_statuses[i].time_blocked++;
-        }
-
-        sleep(WAIT_TIME);
-
-        // liberate resources
-        for (int i = 0; i < PROCESS_NUM - 1; i++)
-        {
-            Liberation lib = get_liberation(liberations_msgid[i]);
-
-            // if the message is empty
-            if (lib.id == -1)
-                continue;
-
-            printf("M: \t\t %d liberates : %d, %d, %d\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
-
-            resources.n_1 += lib.resources.n_1;
-            resources.n_2 += lib.resources.n_2;
-            resources.n_3 += lib.resources.n_3;
-
-            printf("M: \t\t resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
-
-            process_statuses[lib.id].resources.n_1 -= lib.resources.n_1;
-            process_statuses[lib.id].resources.n_2 -= lib.resources.n_2;
-            process_statuses[lib.id].resources.n_3 -= lib.resources.n_3;
-
-            // find the process with the highest priority
             int max_priority_index = -1;
             int max_priority = -1;
-            for (int i = 0; i < PROCESS_NUM - 1; i++)
+
+            for (int j = 0; j < PROCESS_NUM - 1; j++)
             {
-                if (process_statuses[i].state != 0)
+                if (process_statuses[j].state != 0)
                     continue;
 
-                int priority = process_statuses[i].time_blocked + 5 * process_statuses[i].requistions_count;
-                if (priority > max_priority)
+                int priority = process_statuses[j].time_blocked + 5 * process_statuses[j].requistions_count;
+                if (priority > max_priority && checked_procs[j] == 0)
                 {
                     max_priority = priority;
-                    max_priority_index = i;
+                    max_priority_index = j;
                 }
             }
 
-            Request req = {max_priority_index, 2, process_statuses[max_priority_index].resources};
+            checked_procs[max_priority_index] = 1;
 
-            send_request(req);
+            Request req = {max_priority_index, 2, process_statuses[max_priority_index].resources};
+            Response resp = get_resources(req);
+
+            if (resp.is_available && max_priority_index != -1)
+            {
+                send_response(resp, response_msgid);
+                activate_process(max_priority_index);
+            }
         }
 
         Request req = get_request();
 
-        // if the process is
+        // if the process is finished
         if (req.type == 4)
         {
             printf("M: \t\t %d finished\n", req.id + 1);
+
             process_statuses[req.id].state = -1;
+
+            resources.n_1 += process_statuses[req.id].resources.n_1;
+            resources.n_2 += process_statuses[req.id].resources.n_2;
+            resources.n_3 += process_statuses[req.id].resources.n_3;
 
             active_processes--;
         }
 
         if (req.type == 2)
         {
+
+            // check liberation queues for available resources
             printf("M: \t\t %d requests : %d, %d, %d\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
             Response resp = get_resources(req);
 
             if (!resp.is_available)
             {
-                process_statuses[req.id].state = 0;
-
-                process_requests[req.id].n_1 += req.resources.n_1;
-                process_requests[req.id].n_2 += req.resources.n_2;
-                process_requests[req.id].n_3 += req.resources.n_3;
+                block_process(req.id, req);
 
                 printf("M: \t\t %d !S: %d, %d, %d\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
             }
             else
             {
-                process_requests[req.id] = (ResourceList){0, 0, 0};
+                activate_process(req.id);
 
                 printf("M: \t\t %d S: %d, %d, %d\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
             }
@@ -173,6 +193,7 @@ void manager()
 int main(int argc, char *argv[])
 {
     signal(SIGINT, sigint_handler);
+    signal(SIGALRM, blocked_time_handler);
     int choice;
     do
     {
@@ -198,9 +219,9 @@ int main(int argc, char *argv[])
 
         init();
 
-        printf("Available resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
+        alarm(WAIT_TIME);
 
-        pid_t pids[PROCESS_NUM];
+        printf("Available resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
 
         for (int i = 0; i < PROCESS_NUM; i++)
         {
@@ -214,24 +235,16 @@ int main(int argc, char *argv[])
 
             else if (pids[i] == 0)
             {
+                signal(SIGALRM, SIG_IGN);
+                signal(SIGINT, SIG_DFL);
+
                 if (i == PROCESS_NUM - 1)
                 {
                     manager();
-                    printf("M: \t finished from main\n");
                 }
                 else
                 {
-                    char *file_name = get_file_path(choice, i);
-                    FILE *f = fopen(file_name, "r");
-
-                    if (f == NULL)
-                    {
-                        printf("Error opening file!\n");
-                        exit(1);
-                    }
-
-                    process(f, i);
-                    free(file_name);
+                    process(choice, i);
                 }
             }
         }
