@@ -25,8 +25,6 @@ void send_request(Request req)
     // write the request to the buffer
     buffer[*write_idx] = req;
 
-    printf("M %d requests %d %d %d\n", buffer[*write_idx].id, buffer[*write_idx].resources.n_1, buffer[*write_idx].resources.n_2, buffer[*write_idx].resources.n_3);
-
     // increment the write index and wrap around if needed
     (*write_idx) = ((*write_idx) + 1) % BUFFER_SIZE;
 
