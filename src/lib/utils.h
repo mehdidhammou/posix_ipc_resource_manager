@@ -57,6 +57,7 @@ void cleanup_info()
 
 void display_process_statuses()
 {
+    sem_wait(mutex);
     printf("Process states : [\n");
     for (int i = 0; i < PROCESS_NUM - 1; i++)
     {
@@ -78,6 +79,7 @@ void display_process_statuses()
 
         printf("resources : (%d, %d, %d)}\n", process_statuses[i].resources.n_1, process_statuses[i].resources.n_2, process_statuses[i].resources.n_3);
     }
+    sem_post(mutex);
 }
 
 void cleanup()
@@ -272,20 +274,26 @@ Response get_resources(Request req)
     return resp;
 }
 
-void activate_process(int i)
+void activate_process(Request req)
 {
-    process_statuses[i].state = 0;
-    process_statuses[i].time_blocked = 0;
-    process_requests[i] = (ResourceList){0, 0, 0};
+    process_statuses[req.id].state = 0;
+    process_statuses[req.id].time_blocked = 0;
+    process_statuses[req.id].resources.n_1 += process_requests[req.id].n_1;
+    process_statuses[req.id].resources.n_2 += process_requests[req.id].n_2;
+    process_statuses[req.id].resources.n_3 += process_requests[req.id].n_3;
+
+    display_process_statuses();
+
+    process_requests[req.id] = (ResourceList){0, 0, 0};
 }
 
-void block_process(int i, Request req)
+void block_process(Request req)
 {
-    process_statuses[i].state = 1;
-    process_statuses[i].time_blocked = time(NULL);
-    process_statuses[i].resources.n_1 += req.resources.n_1;
-    process_statuses[i].resources.n_2 += req.resources.n_2;
-    process_statuses[i].resources.n_3 += req.resources.n_3;
+    process_statuses[req.id].state = 1;
+    process_statuses[req.id].time_blocked = time(NULL);
+    process_statuses[req.id].resources.n_1 += req.resources.n_1;
+    process_statuses[req.id].resources.n_2 += req.resources.n_2;
+    process_statuses[req.id].resources.n_3 += req.resources.n_3;
 }
 
 void sigint_handler(int sig)

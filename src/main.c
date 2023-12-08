@@ -72,7 +72,7 @@ void manager()
         if (req.type == 2)
         {
             Response resp = get_resources(req);
-            (resp.is_available) ? activate_process(req.id) : block_process(req.id, req);
+            (resp.is_available) ? activate_process(req) : block_process(req);
             send_response(resp, response_msgid);
         }
 
@@ -105,7 +105,7 @@ void manager()
                 if (resp.is_available)
                 {
                     send_response(resp, response_msgid);
-                    activate_process(max_priority_index);
+                    activate_process(req);
                 }
             }
         }
