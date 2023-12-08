@@ -27,17 +27,6 @@ typedef struct
     ResourceList resources; // Assuming ResourceList as an int array
 } Liberation;
 
-void display_response(Response response)
-{
-    printf("Response: ID = %ld, Availability = %s\n", response.id, response.is_available ? "true" : "false");
-}
-
-void display_liberation(Liberation liberation)
-{
-    printf("Liberation: ID = %ld, Resources = [%d, %d, %d]\n",
-           liberation.id, liberation.resources.n_1, liberation.resources.n_2, liberation.resources.n_3);
-}
-
 int main()
 {
     int response_msgid; // Assuming 5 Liberation queues
@@ -51,23 +40,18 @@ int main()
         exit(1);
     }
 
-    // Continuously monitor Response and Liberation queues
+    // Send a Liberation message
     while (1)
     {
-        // Monitor Response queue
-        Liberation lib;
-        if (msgrcv(response_msgid, &lib, sizeof(Liberation), 1, IPC_NOWAIT) != -1)
+        long int id = rand() % (PROCESS_NUM - 1) + 1;
+        Liberation lib = {id, {rand() % 10, rand() % 10, rand() % 10}};
+        printf("Sending Liberation message..., id %ld\n", lib.id);
+
+        if (msgsnd(response_msgid, &lib, sizeof(Liberation) - sizeof(long), 0) == -1)
         {
-            display_liberation(lib);
-            if (msgsnd(response_msgid, &lib, sizeof(Liberation) - sizeof(long), 0) == -1)
-            {
-                perror("msgsnd");
-                exit(1);
-            }
+            perror("msgsnd");
+            exit(1);
         }
-
-        usleep(200000); // Sleep for 0.5 seconds
+        sleep(1);
     }
-
-    return 0;
 }
