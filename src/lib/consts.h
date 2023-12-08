@@ -27,6 +27,6 @@ const Test test_paths[] = {
 // semaphore names
 #define BUFFER_EMPTY_SEM "/buffer_empty"
 #define BUFFER_FULL_SEM "/buffer_full"
-#define MUTEX_BUFFER_SEM "/mutex_buffer"
+#define MUTEX_SEM "/mutex"
 
 #endif

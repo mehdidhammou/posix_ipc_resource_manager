@@ -2,11 +2,11 @@
 #define IPC_H
 
 #include <fcntl.h>
-#include <semaphore.h>
 #include <sys/shm.h>
+#include <semaphore.h>
 
 // semaphores and mutexes
-sem_t *mutex_buffer;
+sem_t *mutex;
 sem_t *buffer_empty;
 sem_t *buffer_full;
 
@@ -20,45 +20,44 @@ int *read_idx;
 void send_request(Request req)
 {
     sem_wait(buffer_empty);
-    sem_wait(mutex_buffer);
+    sem_wait(mutex);
 
-    // write the request to the buffer
+    printf("-----------------------------------------------------------------------\n");
+    printf("[Buffer]\n");
+
     buffer[*write_idx] = req;
 
-    // increment the write index and wrap around if needed
+    printf("New message : ");
+    printf("[ id: %d, type: %d, resources: (%d, %d, %d) ]\n", req.id + 1, req.type, req.resources.n_1, req.resources.n_2, req.resources.n_3);
+
     (*write_idx) = ((*write_idx) + 1) % BUFFER_SIZE;
 
-    sem_post(mutex_buffer);
+    printf("-----------------------------------------------------------------------\n");
+
+    sem_post(mutex);
     sem_post(buffer_full);
 }
 
 Request get_request()
 {
-    // !still not adhering to FIFO
     Request req = {.id = -1, .type = -1, .resources = {0, 0, 0}};
 
     if (sem_trywait(buffer_full) == 0)
     {
-        sem_wait(mutex_buffer);
+        sem_wait(mutex);
 
-        // read the request from the buffer
+        printf("-----------------------------------------------------------------------\n");
+        printf("[Buffer]\n");
+
         req = buffer[*read_idx];
 
-        switch (req.type)
-        {
-        case 2:
-            printf("M: %d requests %d %d %d\n", req.id, req.resources.n_1, req.resources.n_2, req.resources.n_3);
-            break;
+        printf("Read {id: %d, type: %d}\n", req.id + 1, req.type);
 
-        case 4:
-            printf("%d finished\n", req.id);
-            break;
-        }
-
-        // increment the read index and wrap around if needed
         (*read_idx) = ((*read_idx) + 1) % BUFFER_SIZE;
 
-        sem_post(mutex_buffer);
+        printf("-----------------------------------------------------------------------\n");
+
+        sem_post(mutex);
         sem_post(buffer_empty);
     }
 
@@ -76,47 +75,36 @@ void init_semaphores()
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
-    printf("semaphores initialized\n");
 }
 
 void init_mutexes()
 {
     // Initialize named mutexes, we use sem_open with initial value 1 to simulate mutex
-    mutex_buffer = sem_open(MUTEX_BUFFER_SEM, O_CREAT, 0644, 1);
-
-    printf("mutexes initialized\n");
+    mutex = sem_open(MUTEX_SEM, O_CREAT, 0644, 1);
 }
 
-void share_memory()
+void init_shared_memory()
 {
-    // share memory for the buffer
     int buffer_id = shmget(IPC_PRIVATE, sizeof(Request) * BUFFER_SIZE, IPC_CREAT | 0644);
-
     if (buffer_id == -1)
     {
         perror("shmget");
         exit(1);
     }
-
     buffer = (Request *)shmat(buffer_id, NULL, 0);
-
     if (buffer == (void *)-1)
     {
         perror("shmat");
         exit(1);
     }
 
-    // share memory for write_idx
     int write_idx_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
-
     if (write_idx_id == -1)
     {
         perror("shmget");
         exit(1);
     }
-
     write_idx = (int *)shmat(write_idx_id, NULL, 0);
-
     if (write_idx == (void *)-1)
     {
         perror("shmat");
@@ -124,40 +112,30 @@ void share_memory()
     }
 
     *write_idx = 0;
-
-    // share memory for read_idx
     int read_idx_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
-
     if (read_idx_id == -1)
     {
         perror("shmget");
         exit(1);
     }
-
     read_idx = (int *)shmat(read_idx_id, NULL, 0);
-
     if (read_idx == (void *)-1)
     {
         perror("shmat");
         exit(1);
     }
-
     *read_idx = 0;
-
-    printf("shared memory initialized\n");
 }
 
 void cleanup_semaphores()
 {
     sem_close(buffer_empty);
     sem_close(buffer_full);
-    sem_close(mutex_buffer);
+    sem_close(mutex);
 
     sem_unlink(BUFFER_EMPTY_SEM);
     sem_unlink(BUFFER_FULL_SEM);
-    sem_unlink(MUTEX_BUFFER_SEM);
-
-    printf("Semaphores cleared.\n");
+    sem_unlink(MUTEX_SEM);
 }
 
 void cleanup_shared_memory()
@@ -165,8 +143,6 @@ void cleanup_shared_memory()
     shmdt(buffer);
     shmdt(write_idx);
     shmdt(read_idx);
-
-    printf("Shared memory cleared.\n");
 }
 
 #endif

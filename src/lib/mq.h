@@ -13,7 +13,7 @@ void init_message_queues()
     // create 6 message queues , 5 for the resource liberation and 1 for the response
     for (int i = 0; i < PROCESS_NUM; i++)
     {
-        key_t key = ftok("main.c", i);
+        key_t key = ftok("/home/mahdi/Desktop/tp-algo-2/.gitignore", i);
         if (i == PROCESS_NUM - 1)
         {
             response_msgid = msgget(key, 0644 | IPC_CREAT);
@@ -33,23 +33,19 @@ void init_message_queues()
             }
         }
     }
-
-    printf("message queues initialized\n");
 }
 
 void send_response(Response resp, int response_msgid)
 {
-    // send the response to the process
     resp.id++;
     if (msgsnd(response_msgid, &resp, RESPONSE_SIZE, 0) == -1)
     {
-        printf("error from send_response, process %ld\n", resp.id);
         perror("msgsnd");
         exit(1);
     }
 }
 
-Response get_response(int i, int response_msgid)
+Response get_response(long int i, int response_msgid)
 {
     Response resp;
     if (msgrcv(response_msgid, &resp, RESPONSE_SIZE, i, 0) == -1)
@@ -63,11 +59,9 @@ Response get_response(int i, int response_msgid)
 
 void send_liberation(Liberation lib, int liberations_msgid)
 {
-    printf("%ld liberates : %d, %d, %d\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
     lib.id++;
     if (msgsnd(liberations_msgid, &lib, LIBERATION_SIZE, 0) == -1)
     {
-        printf("error from send_liberation, process %ld\n", lib.id);
         perror("msgsnd");
         exit(1);
     }
@@ -91,7 +85,6 @@ Liberation get_liberation(int liberations_msgid)
     else
     {
         lib.id--;
-        printf("M: \t\t %ld liberates : %d, %d, %d\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
     }
     return lib;
 }
@@ -110,8 +103,6 @@ void cleanup_mqs()
             msgctl(liberation_msgids[i], IPC_RMID, NULL);
         }
     }
-
-    printf("message queues cleared\n");
 }
 
 #endif

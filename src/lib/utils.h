@@ -17,7 +17,7 @@
 // array for requests that were not satisfied
 ResourceList process_requests[PROCESS_NUM - 1];
 
-// array for the status of the processes
+// array for process states
 Status process_statuses[PROCESS_NUM - 1];
 
 // resources
@@ -35,24 +35,49 @@ void init_arrays()
 void init()
 {
     init_arrays();
-    init_semaphores();
     init_mutexes();
+    init_semaphores();
+    init_shared_memory();
     init_message_queues();
-    share_memory();
+
+    printf("Initialized.\n");
+    printf("Available resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
+    printf("-----------------------------------------------------------------------\n");
 }
 
 void cleanup_info()
 {
-    // Clear the arrays
     memset(process_requests, 0, sizeof(process_requests));
     memset(process_statuses, 0, sizeof(process_statuses));
 
-    // Reset the resources
     resources.n_1 = 10;
     resources.n_2 = 10;
     resources.n_3 = 10;
+}
 
-    printf("Arrays and resources cleared\n");
+void display_process_statuses()
+{
+    printf("Process states : [\n");
+    for (int i = 0; i < PROCESS_NUM - 1; i++)
+    {
+        printf("{id : %d, ", i + 1);
+        switch (process_statuses[i].state)
+        {
+        case -1:
+            printf("Finished}\n");
+            continue;
+
+        case 0:
+            printf("Active, ");
+            break;
+
+        case 1:
+            printf("Blocked, time blocked : %ld, ", process_statuses[i].time_blocked);
+            break;
+        }
+
+        printf("resources : (%d, %d, %d)}\n", process_statuses[i].resources.n_1, process_statuses[i].resources.n_2, process_statuses[i].resources.n_3);
+    }
 }
 
 void cleanup()
@@ -61,12 +86,11 @@ void cleanup()
     cleanup_mqs();
     cleanup_semaphores();
     cleanup_shared_memory();
+    printf("Cleaned up.\n");
 }
 
 void display_choices()
 {
-    system("clear");
-
     for (int i = 0; i < sizeof(test_paths) / sizeof(test_paths[0]); i++)
         printf("%d. %s\n", i + 1, test_paths[i].name);
 
@@ -78,23 +102,22 @@ bool is_request_satisfied(ResourceList req, ResourceList res)
     return req.n_1 == res.n_1 && req.n_2 == res.n_2 && req.n_3 == res.n_3;
 }
 
-void check_liberation_queues(int msgids[PROCESS_NUM - 1])
+void check_liberation_queues()
 {
     for (int i = 0; i < PROCESS_NUM - 1; i++)
     {
-        Liberation lib = get_liberation(msgids[i]);
+        Liberation lib = get_liberation(liberation_msgids[i]);
 
         // if the message is empty
         if (lib.id == -1)
             continue;
 
-        printf("M: \t\t %ld liberates : %d, %d, %d\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
-
         resources.n_1 += lib.resources.n_1;
         resources.n_2 += lib.resources.n_2;
         resources.n_3 += lib.resources.n_3;
 
-        printf("M: \t\t resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
+        printf("Liberation: %ld, {%d, %d, %d}\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
+        printf("Available resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
 
         process_statuses[lib.id].resources.n_1 -= lib.resources.n_1;
         process_statuses[lib.id].resources.n_2 -= lib.resources.n_2;
@@ -124,7 +147,7 @@ bool check_availability(Request req, ResourceList res)
 
     for (int i = 0; i < PROCESS_NUM - 1; i++)
     {
-        if (process_statuses[i].state != 0)
+        if (process_statuses[i].state != 1)
             continue;
 
         int needed, available, taken;
@@ -166,7 +189,7 @@ void gather_resources(Request req, ResourceList res)
 
     for (int i = 0; i < PROCESS_NUM - 1; i++)
     {
-        if (process_statuses[i].state != 0)
+        if (process_statuses[i].state != 1)
             continue;
 
         bool has_taken = false;
@@ -210,10 +233,8 @@ void gather_resources(Request req, ResourceList res)
             process_requests[i].n_3 += taken;
         }
 
-        if (has_taken)
-
-            if (is_request_satisfied(req.resources, gathered))
-                break;
+        if (has_taken && is_request_satisfied(req.resources, gathered))
+            break;
     }
 }
 
@@ -223,50 +244,44 @@ Response get_resources(Request req)
     resp.id = req.id;
     resp.is_available = false;
 
-    if (
-        req.resources.n_1 <= resources.n_1 &&
-        req.resources.n_2 <= resources.n_2 &&
-        req.resources.n_3 <= resources.n_3)
+    ResourceList res = {0, 0, 0};
+
+    res.n_1 = min(resources.n_1, req.resources.n_1);
+    res.n_2 = min(resources.n_2, req.resources.n_2);
+    res.n_3 = min(resources.n_3, req.resources.n_3);
+
+    if (is_request_satisfied(req.resources, res))
     {
         resp.is_available = true;
-
-        resources.n_1 -= req.resources.n_1;
-        resources.n_2 -= req.resources.n_2;
-        resources.n_3 -= req.resources.n_3;
     }
-    else
+    else if (check_availability(req, res))
     {
-        ResourceList res = {0, 0, 0};
-
-        res.n_1 = min(resources.n_1, req.resources.n_1);
-        res.n_2 = min(resources.n_2, req.resources.n_2);
-        res.n_3 = min(resources.n_3, req.resources.n_3);
-
-        if (check_availability(req, res))
-        {
-            gather_resources(req, res);
-
-            resp.is_available = true;
-
-            resources.n_1 -= res.n_1;
-            resources.n_2 -= res.n_2;
-            resources.n_3 -= res.n_3;
-        }
+        resp.is_available = true;
+        gather_resources(req, res);
     }
+
+    if (resp.is_available)
+    {
+        resources.n_1 -= res.n_1;
+        resources.n_2 -= res.n_2;
+        resources.n_3 -= res.n_3;
+    }
+
+    printf("%d, %d %s : {%d, %d, %d}\n", req.id + 1, req.type, (resp.is_available ? "Granted" : "Blocked"), req.resources.n_1, req.resources.n_2, req.resources.n_3);
 
     return resp;
 }
 
 void activate_process(int i)
 {
-    process_statuses[i].state = 1;
+    process_statuses[i].state = 0;
     process_statuses[i].time_blocked = 0;
     process_requests[i] = (ResourceList){0, 0, 0};
 }
 
 void block_process(int i, Request req)
 {
-    process_statuses[i].state = 0;
+    process_statuses[i].state = 1;
     process_statuses[i].time_blocked = time(NULL);
     process_statuses[i].resources.n_1 += req.resources.n_1;
     process_statuses[i].resources.n_2 += req.resources.n_2;

@@ -23,13 +23,13 @@ typedef struct
 
 typedef struct
 {
-    long id;
+    long int id;
     bool is_available;
 } Response;
 
 typedef struct
 {
-    long id;
+    long int id;
     ResourceList resources;
 } Liberation;
 
