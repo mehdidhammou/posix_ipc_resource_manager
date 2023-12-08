@@ -3,7 +3,6 @@
 
 void process(int choice, long int i)
 {
-
     char *file_name = get_file_path(choice, i);
     FILE *f = fopen(file_name, "r");
 
@@ -21,7 +20,6 @@ void process(int choice, long int i)
     while (fscanf(f, "%d,%d,%d,%d", &inst.type, &inst.resources.n_1, &inst.resources.n_2, &inst.resources.n_3) != EOF)
     {
         sleep(WAIT_TIME);
-
         switch (inst.type)
         {
         case 2:
@@ -60,12 +58,7 @@ void manager()
 
         if (req.type == 4)
         {
-            process_statuses[req.id].state = -1;
-
-            resources.n_1 += process_statuses[req.id].resources.n_1;
-            resources.n_2 += process_statuses[req.id].resources.n_2;
-            resources.n_3 += process_statuses[req.id].resources.n_3;
-
+            finish_process(req);
             active_processes--;
         }
 
@@ -104,8 +97,8 @@ void manager()
 
                 if (resp.is_available)
                 {
-                    send_response(resp, response_msgid);
                     activate_process(req);
+                    send_response(resp, response_msgid);
                 }
             }
         }
