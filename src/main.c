@@ -126,15 +126,8 @@ int main(int argc, char *argv[])
     int choice;
     do
     {
-        system("clear");
-        printf("Choose a test:\n");
-        printf("1. No resource request\n");
-        printf("2. One resource request with one liberation\n");
-        printf("3. One resource request with mulitple liberations\n");
-        printf("4. mulitple resource requests with one liberation\n");
-        printf("5. mulitple resource requests with mulitple liberations\n");
-        printf("0. Exit\n");
-
+        display_choices();
+        
         scanf("%d", &choice);
 
         if (choice == 0)

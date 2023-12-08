@@ -63,6 +63,16 @@ void cleanup()
     cleanup_shared_memory();
 }
 
+void display_choices()
+{
+    system("clear");
+
+    for (int i = 0; i < sizeof(test_paths) / sizeof(test_paths[0]); i++)
+        printf("%d. %s\n", i + 1, test_paths[i].name);
+
+    printf("0. Exit\n");
+}
+
 bool is_request_satisfied(ResourceList req, ResourceList res)
 {
     return req.n_1 == res.n_1 && req.n_2 == res.n_2 && req.n_3 == res.n_3;
@@ -94,14 +104,13 @@ void check_liberation_queues(int msgids[PROCESS_NUM - 1])
 
 char *get_file_path(int choice, int i)
 {
-    const char *paths[] = {TEST_1, TEST_2, TEST_3, TEST_4, TEST_5};
     char file_name[10];
 
     sprintf(file_name, "%d.txt", i);
+    int len = strlen(test_paths[choice - 1].path) + strlen(file_name) + 2;
+    char *path = (char *)malloc(len * sizeof(char));
 
-    char *path = malloc((strlen(paths[choice - 1]) + strlen(file_name) + 2) * sizeof(char));
-
-    strcpy(path, paths[choice - 1]);
+    strcpy(path, test_paths[choice - 1].path);
 
     strcat(path, "/");
     strcat(path, file_name);

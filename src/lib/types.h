@@ -40,4 +40,10 @@ typedef struct
     ResourceList resources;
 } Status;
 
+typedef struct
+{
+    const char *name;
+    const char *path;
+} Test;
+
 #endif
