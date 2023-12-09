@@ -43,7 +43,7 @@ int main()
     int response_msgid; // Assuming 5 Liberation queues
 
     // Generate keys and get message queue IDs for Liberation and Response queues
-    key_t key = ftok("/home/mahdi/Desktop/tp-algo-2/.gitignore", 5);
+    key_t key = ftok("./src/main.c", 5);
     response_msgid = msgget(key, 0644 | IPC_CREAT);
     if (response_msgid == -1)
     {

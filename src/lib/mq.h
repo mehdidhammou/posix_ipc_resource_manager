@@ -13,7 +13,13 @@ void init_message_queues()
     // create 6 message queues , 5 for the resource liberation and 1 for the response
     for (int i = 0; i < PROCESS_NUM; i++)
     {
-        key_t key = ftok("/home/mahdi/Desktop/tp-algo-2/.gitignore", i);
+        key_t key = ftok("./src/main.c", i);
+        if (key == -1)
+        {
+            perror("ftok");
+            exit(1);
+        }
+        
         if (i == PROCESS_NUM - 1)
         {
             response_msgid = msgget(key, 0644 | IPC_CREAT);
