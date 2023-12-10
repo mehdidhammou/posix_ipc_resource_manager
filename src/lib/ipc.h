@@ -9,6 +9,8 @@
 sem_t *mutex;
 sem_t *buffer_empty;
 sem_t *buffer_full;
+sem_t *response;
+sem_t *mutex_response;
 
 // buffer for requests made by the processes
 Request *buffer;
@@ -81,6 +83,12 @@ void init_mutexes()
 {
     // Initialize named mutexes, we use sem_open with initial value 1 to simulate mutex
     mutex = sem_open(MUTEX_SEM, O_CREAT, 0644, 1);
+
+    if (mutex == SEM_FAILED)
+    {
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
 }
 
 void init_shared_memory()
