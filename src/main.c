@@ -47,6 +47,105 @@ void process(int choice, long int i)
     exit(0);
 }
 
+char data[6][20][20] = {
+    {"1,0,0,0",
+     "1,0,0,0",
+     "2,4,4,5",
+     "1,0,0,0",
+     "1,0,0,0",
+     "3,4,4,5",
+     "1,0,0,0",
+     "2,3,2,0",
+     "1,0,0,0",
+     "3,3,2,0",
+     "4,0,0,0",
+     "END"},
+    {"1,0,0,0",
+     "1,0,0,0",
+     "2,1,0,1",
+     "1,0,0,0",
+     "1,0,0,0",
+     "3,1,0,1",
+     "1,0,0,0",
+     "2,4,4,10",
+     "1,0,0,0",
+     "3,4,4,10",
+     "4,0,0,0",
+     "END"},
+    {"1,0,0,0",
+     "1,0,0,0",
+     "2,10,10,10",
+     "1,0,0,0",
+     "1,0,0,0",
+     "3,10,10,10",
+     "1,0,0,0",
+     "2,4,4,0",
+     "1,0,0,0",
+     "3,4,4,0",
+     "4,0,0,0",
+     "END"},
+    {"1,0,0,0",
+     "1,0,0,0",
+     "2,10,10,10",
+     "1,0,0,0",
+     "1,0,0,0",
+     "3,10,10,10",
+     "1,0,0,0",
+     "2,4,4,0",
+     "1,0,0,0",
+     "3,4,4,0",
+     "4,0,0,0",
+     "END"},
+    {"1,0,0,0",
+     "1,0,0,0",
+     "2,10,10,10",
+     "1,0,0,0",
+     "1,0,0,0",
+     "3,10,10,10",
+     "1,0,0,0",
+     "2,4,4,0",
+     "1,0,0,0",
+     "3,4,4,0",
+     "4,0,0,0",
+     "END"}};
+
+void process_sim(int choice, long int i)
+{
+    Request req;
+    Response resp;
+    Instruction inst;
+    Liberation lib;
+
+    int lastLine = 0;
+
+    while (strcmp(data[choice - 1][lastLine], "END") != 0)
+    {
+        sleep(WAIT_TIME);
+        sscanf(data[choice - 1][lastLine], "%d,%d,%d,%d", &inst.type, &inst.resources.n_1, &inst.resources.n_2, &inst.resources.n_3);
+        switch (inst.type)
+        {
+        case 2:
+            req = (Request){i, inst.type, inst.resources};
+            send_request(req);
+            resp = get_response(i, response_msgid);
+            if (!resp.is_available)
+                resp = get_response(i, response_msgid);
+            break;
+
+        case 3:
+            lib = (Liberation){i, inst.resources};
+            send_liberation(lib, liberation_msgids[i]);
+            break;
+
+        case 4:
+            req = (Request){i, inst.type, inst.resources};
+            send_request(req);
+            break;
+        }
+        lastLine++;
+    }
+}
+
 void manager()
 {
     int active_processes = PROCESS_NUM - 1;
@@ -146,7 +245,7 @@ int main(int argc, char *argv[])
             else if (pids[i] == 0)
             {
                 signal(SIGINT, SIG_DFL);
-                (i == PROCESS_NUM - 1) ? manager() : process(choice, i);
+                (i == PROCESS_NUM - 1) ? manager() : process_sim(choice, i);
             }
         }
 

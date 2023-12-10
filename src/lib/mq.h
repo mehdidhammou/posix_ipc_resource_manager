@@ -13,12 +13,15 @@ void init_message_queues()
     // create 6 message queues , 5 for the resource liberation and 1 for the response
     for (int i = 0; i < PROCESS_NUM; i++)
     {
-        key_t key = ftok("./src/main.c", i);
-        if (key == -1)
-        {
-            perror("ftok");
-            exit(1);
-        }
+        // key_t key = ftok("./src/main.c", i);
+        // if (key == -1)
+        // {
+        //     perror("ftok");
+        //     exit(1);
+        // }
+        
+        // use random value
+        key_t key = rand();
         
         if (i == PROCESS_NUM - 1)
         {
