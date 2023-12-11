@@ -56,7 +56,6 @@ void cleanup_info()
     resources.n_3 = 10;
 }
 
-
 void cleanup()
 {
     cleanup_info();
@@ -66,33 +65,38 @@ void cleanup()
     printf("Cleaned up.\n");
 }
 
-
 bool is_request_satisfied(ResourceList req, ResourceList res)
 {
     return req.n_1 == res.n_1 && req.n_2 == res.n_2 && req.n_3 == res.n_3;
 }
 
-void check_liberation_queues()
+int check_liberation_queues(int last_checked_lib)
 {
-    for (int i = 0; i < PROCESS_NUM - 1; i++)
+    Liberation lib;
+    int i;
+    
+    for (i = (last_checked_lib + 1) % (PROCESS_NUM - 1); i < PROCESS_NUM - 1; i++)
     {
-        Liberation lib = get_liberation(liberation_msgids[i]);
+        lib = get_liberation(liberation_msgids[i]);
 
-        // if the message is empty
-        if (lib.id == -1)
-            continue;
+        if (lib.id != -1)
+        {
+            resources.n_1 += lib.resources.n_1;
+            resources.n_2 += lib.resources.n_2;
+            resources.n_3 += lib.resources.n_3;
 
-        resources.n_1 += lib.resources.n_1;
-        resources.n_2 += lib.resources.n_2;
-        resources.n_3 += lib.resources.n_3;
+            printf("Liberation: %ld, {%d, %d, %d}\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
+            printf("Available resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
 
-        printf("Liberation: %ld, {%d, %d, %d}\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
-        printf("Available resources : %d, %d, %d\n", resources.n_1, resources.n_2, resources.n_3);
+            process_statuses[lib.id].resources.n_1 -= lib.resources.n_1;
+            process_statuses[lib.id].resources.n_2 -= lib.resources.n_2;
+            process_statuses[lib.id].resources.n_3 -= lib.resources.n_3;
 
-        process_statuses[lib.id].resources.n_1 -= lib.resources.n_1;
-        process_statuses[lib.id].resources.n_2 -= lib.resources.n_2;
-        process_statuses[lib.id].resources.n_3 -= lib.resources.n_3;
+            break;
+        }
     }
+
+    return i;
 }
 
 char *get_file_path(int choice, int i)

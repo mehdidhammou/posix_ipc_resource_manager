@@ -148,6 +148,7 @@ void process_sim(int choice, long int i)
 
 void manager()
 {
+    int last_checked_lib = -1;
     int active_processes = PROCESS_NUM - 1;
     while (active_processes > 0)
     {
@@ -159,6 +160,7 @@ void manager()
         {
             finish_process(req);
             active_processes--;
+            continue;
         }
 
         if (req.type == 2)
@@ -166,12 +168,13 @@ void manager()
             Response resp = get_resources(req);
             (resp.is_available) ? activate_process(req) : block_process(req);
             send_response(resp, response_msgid);
+            continue;
         }
-
-        check_liberation_queues();
 
         if (req.type == -1)
         {
+            last_checked_lib = check_liberation_queues(last_checked_lib);
+
             int max_priority_index = -1;
             time_t max_priority = -1;
 
@@ -245,7 +248,7 @@ int main(int argc, char *argv[])
             else if (pids[i] == 0)
             {
                 signal(SIGINT, SIG_DFL);
-                (i == PROCESS_NUM - 1) ? manager() : process_sim(choice, i);
+                (i == PROCESS_NUM - 1) ? manager() : process(choice, i);
             }
         }
 
