@@ -17,13 +17,13 @@ typedef struct
 
 typedef struct
 {
-    long int id;
+    long id;
     bool is_available;
 } Response;
 
 typedef struct
 {
-    long int id;
+    long id;
     ResourceList resources; // Assuming ResourceList as an int array
 } Liberation;
 
@@ -43,7 +43,7 @@ int main()
     // Send a Liberation message
     while (1)
     {
-        long int id = rand() % (PROCESS_NUM - 1) + 1;
+        long id = rand() % (PROCESS_NUM - 1) + 1;
         Liberation lib = {id, {rand() % 10, rand() % 10, rand() % 10}};
         printf("Sending Liberation message..., id %ld\n", lib.id);
 

@@ -1,7 +1,7 @@
 #include <sys/wait.h>
 #include "lib/utils.h"
 
-void process(int choice, long int i)
+void process(int choice, long i)
 {
     char *file_name = get_file_path(choice, i);
     FILE *f = fopen(file_name, "r");
@@ -25,9 +25,9 @@ void process(int choice, long int i)
         case 2:
             req = (Request){i, inst.type, inst.resources};
             send_request(req);
-            resp = get_response(i, response_msgid);
+            resp = get_response(i);
             if (!resp.is_available)
-                resp = get_response(i, response_msgid);
+                resp = get_response(i);
             break;
 
         case 3:
@@ -47,111 +47,16 @@ void process(int choice, long int i)
     exit(0);
 }
 
-char data[6][20][20] = {
-    {"1,0,0,0",
-     "1,0,0,0",
-     "2,4,4,5",
-     "1,0,0,0",
-     "1,0,0,0",
-     "3,4,4,5",
-     "1,0,0,0",
-     "2,3,2,0",
-     "1,0,0,0",
-     "3,3,2,0",
-     "4,0,0,0",
-     "END"},
-    {"1,0,0,0",
-     "1,0,0,0",
-     "2,1,0,1",
-     "1,0,0,0",
-     "1,0,0,0",
-     "3,1,0,1",
-     "1,0,0,0",
-     "2,4,4,10",
-     "1,0,0,0",
-     "3,4,4,10",
-     "4,0,0,0",
-     "END"},
-    {"1,0,0,0",
-     "1,0,0,0",
-     "2,10,10,10",
-     "1,0,0,0",
-     "1,0,0,0",
-     "3,10,10,10",
-     "1,0,0,0",
-     "2,4,4,0",
-     "1,0,0,0",
-     "3,4,4,0",
-     "4,0,0,0",
-     "END"},
-    {"1,0,0,0",
-     "1,0,0,0",
-     "2,10,10,10",
-     "1,0,0,0",
-     "1,0,0,0",
-     "3,10,10,10",
-     "1,0,0,0",
-     "2,4,4,0",
-     "1,0,0,0",
-     "3,4,4,0",
-     "4,0,0,0",
-     "END"},
-    {"1,0,0,0",
-     "1,0,0,0",
-     "2,10,10,10",
-     "1,0,0,0",
-     "1,0,0,0",
-     "3,10,10,10",
-     "1,0,0,0",
-     "2,4,4,0",
-     "1,0,0,0",
-     "3,4,4,0",
-     "4,0,0,0",
-     "END"}};
-
-void process_sim(int choice, long int i)
-{
-    Request req;
-    Response resp;
-    Instruction inst;
-    Liberation lib;
-
-    int lastLine = 0;
-
-    while (strcmp(data[choice - 1][lastLine], "END") != 0)
-    {
-        sleep(WAIT_TIME);
-        sscanf(data[choice - 1][lastLine], "%d,%d,%d,%d", &inst.type, &inst.resources.n_1, &inst.resources.n_2, &inst.resources.n_3);
-        switch (inst.type)
-        {
-        case 2:
-            req = (Request){i, inst.type, inst.resources};
-            send_request(req);
-            resp = get_response(i, response_msgid);
-            if (!resp.is_available)
-                resp = get_response(i, response_msgid);
-            break;
-
-        case 3:
-            lib = (Liberation){i, inst.resources};
-            send_liberation(lib, liberation_msgids[i]);
-            break;
-
-        case 4:
-            req = (Request){i, inst.type, inst.resources};
-            send_request(req);
-            break;
-        }
-        lastLine++;
-    }
-}
-
 void manager()
 {
-    int last_checked_lib = -1;
+    int next_lib_queue = 0;
     int active_processes = PROCESS_NUM - 1;
-    while (active_processes > 0)
+    int empty_queues = 0;
+    int last_attempted_activation = -1;
+
+    while (active_processes > 0 || empty_queues != PROCESS_NUM - 1)
     {
+        display_stats();
         sleep(WAIT_TIME);
 
         Request req = get_request();
@@ -160,6 +65,7 @@ void manager()
         {
             finish_process(req);
             active_processes--;
+            display_stats();
             continue;
         }
 
@@ -167,25 +73,26 @@ void manager()
         {
             Response resp = get_resources(req);
             (resp.is_available) ? activate_process(req) : block_process(req);
-            send_response(resp, response_msgid);
+            send_response(resp);
+            display_stats();
             continue;
         }
 
         if (req.type == -1)
         {
-            last_checked_lib = check_liberation_queues(last_checked_lib);
+            next_lib_queue = check_liberation_queues(next_lib_queue, &empty_queues);
 
             int max_priority_index = -1;
             time_t max_priority = -1;
 
-            for (long int i = 0; i < PROCESS_NUM - 1; i++)
+            for (long i = 0; i < PROCESS_NUM - 1; i++)
             {
                 if (process_statuses[i].state != 1)
                     continue;
 
                 time_t priority = time(NULL) - process_statuses[i].time_blocked;
 
-                if (priority > max_priority)
+                if (priority > max_priority && i != last_attempted_activation)
                 {
                     max_priority = priority;
                     max_priority_index = i;
@@ -194,13 +101,20 @@ void manager()
 
             if (max_priority_index != -1)
             {
-                Request req = {max_priority_index, 2, process_statuses[max_priority_index].resources};
+                Request req = {max_priority_index, 2, process_requests[max_priority_index]};
                 Response resp = get_resources(req);
-
                 if (resp.is_available)
                 {
+                    last_attempted_activation = -1;
+                    display_resources();
+                    sleep(WAIT_TIME);
                     activate_process(req);
-                    send_response(resp, response_msgid);
+                    send_response(resp);
+                    display_stats();
+                }
+                else
+                {
+                    last_attempted_activation = max_priority_index;
                 }
             }
         }
@@ -236,7 +150,9 @@ int main(int argc, char *argv[])
 
         pid_t pids[PROCESS_NUM];
 
-        for (long int i = 0; i < PROCESS_NUM; i++)
+        system("clear");
+
+        for (long i = 0; i < PROCESS_NUM; i++)
         {
             pids[i] = fork();
 

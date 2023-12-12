@@ -5,15 +5,18 @@
 #include <sys/shm.h>
 #include <semaphore.h>
 
-// semaphores and mutexes
-sem_t *mutex;
+// semaphores
 sem_t *buffer_empty;
-sem_t *buffer_full;
-sem_t *response;
-sem_t *mutex_response;
+
+// mutexes
+sem_t *buffer_mutex;
+sem_t *counter_mutex;
 
 // buffer for requests made by the processes
 Request *buffer;
+
+// counter for number of requests in buffer
+int *counter;
 
 // indices
 int *write_idx;
@@ -22,46 +25,44 @@ int *read_idx;
 void send_request(Request req)
 {
     sem_wait(buffer_empty);
-    sem_wait(mutex);
-
-    printf("-----------------------------------------------------------------------\n");
-    printf("[Buffer]\n");
+    sem_wait(buffer_mutex);
 
     buffer[*write_idx] = req;
 
-    printf("New message : ");
-    printf("[ id: %d, type: %d, resources: (%d, %d, %d) ]\n", req.id + 1, req.type, req.resources.n_1, req.resources.n_2, req.resources.n_3);
-
     (*write_idx) = ((*write_idx) + 1) % BUFFER_SIZE;
 
-    printf("-----------------------------------------------------------------------\n");
+    sem_wait(counter_mutex);
+    (*counter)++;
+    sem_post(counter_mutex);
 
-    sem_post(mutex);
-    sem_post(buffer_full);
+    sem_post(buffer_mutex);
 }
 
 Request get_request()
 {
     Request req = {.id = -1, .type = -1, .resources = {0, 0, 0}};
 
-    if (sem_trywait(buffer_full) == 0)
+    sem_wait(counter_mutex);
+    if (*counter == 0)
     {
-        sem_wait(mutex);
-
-        printf("-----------------------------------------------------------------------\n");
-        printf("[Buffer]\n");
-
-        req = buffer[*read_idx];
-
-        printf("Read {id: %d, type: %d}\n", req.id + 1, req.type);
-
-        (*read_idx) = ((*read_idx) + 1) % BUFFER_SIZE;
-
-        printf("-----------------------------------------------------------------------\n");
-
-        sem_post(mutex);
-        sem_post(buffer_empty);
+        // no requests in buffer
+        sem_post(counter_mutex);
+        return req;
     }
+    sem_post(counter_mutex);
+    sem_wait(buffer_mutex);
+
+
+    req = buffer[*read_idx];
+
+    (*read_idx) = ((*read_idx) + 1) % BUFFER_SIZE;
+
+    sem_wait(counter_mutex);
+    (*counter)--;
+    sem_post(counter_mutex);
+
+    sem_post(buffer_mutex);
+    sem_post(buffer_empty);
 
     return req;
 }
@@ -70,9 +71,7 @@ void init_semaphores()
 {
     // Initialize named semaphores
     buffer_empty = sem_open(BUFFER_EMPTY_SEM, O_CREAT, 0644, BUFFER_SIZE);
-    buffer_full = sem_open(BUFFER_FULL_SEM, O_CREAT, 0644, 0);
-
-    if (buffer_empty == SEM_FAILED || buffer_full == SEM_FAILED)
+    if (buffer_empty == SEM_FAILED)
     {
         perror("sem_open");
         exit(EXIT_FAILURE);
@@ -82,9 +81,10 @@ void init_semaphores()
 void init_mutexes()
 {
     // Initialize named mutexes, we use sem_open with initial value 1 to simulate mutex
-    mutex = sem_open(MUTEX_SEM, O_CREAT, 0644, 1);
+    buffer_mutex = sem_open(BUFFER_MUTEX, O_CREAT, 0644, 1);
+    counter_mutex = sem_open(COUNTER_MUTEX, O_CREAT, 0644, 1);
 
-    if (mutex == SEM_FAILED)
+    if (buffer_mutex == SEM_FAILED || counter_mutex == SEM_FAILED)
     {
         perror("sem_open");
         exit(EXIT_FAILURE);
@@ -133,17 +133,33 @@ void init_shared_memory()
         exit(1);
     }
     *read_idx = 0;
+
+    int counter_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
+    if (counter_id == -1)
+    {
+        perror("shmget");
+        exit(1);
+    }
+
+    counter = (int *)shmat(counter_id, NULL, 0);
+    if (counter == (void *)-1)
+    {
+        perror("shmat");
+        exit(1);
+    }
+
+    *counter = 0;
 }
 
 void cleanup_semaphores()
 {
     sem_close(buffer_empty);
-    sem_close(buffer_full);
-    sem_close(mutex);
+    sem_close(buffer_mutex);
+    sem_close(counter_mutex);
 
     sem_unlink(BUFFER_EMPTY_SEM);
-    sem_unlink(BUFFER_FULL_SEM);
-    sem_unlink(MUTEX_SEM);
+    sem_unlink(COUNTER_MUTEX);
+    sem_unlink(BUFFER_MUTEX);
 }
 
 void cleanup_shared_memory()
@@ -151,6 +167,7 @@ void cleanup_shared_memory()
     shmdt(buffer);
     shmdt(write_idx);
     shmdt(read_idx);
+    shmdt(counter);
 }
 
 #endif

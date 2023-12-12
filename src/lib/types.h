@@ -1,6 +1,15 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+#define RESOURCE_NUM sizeof(ResourceList) / sizeof(int)
+#define MAX_RESOURCE_CHARS 10
+
+typedef struct
+{
+    long mtype;
+    char mtext[100];
+} Message;
+
 typedef struct
 {
     int n_1;
@@ -23,13 +32,13 @@ typedef struct
 
 typedef struct
 {
-    long int id;
-    bool is_available;
+    long id;
+    int is_available;
 } Response;
 
 typedef struct
 {
-    long int id;
+    long id;
     ResourceList resources;
 } Liberation;
 

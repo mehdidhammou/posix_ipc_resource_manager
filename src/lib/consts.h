@@ -21,12 +21,13 @@ const Test test_paths[] = {
 #define PROCESS_NUM 6
 #define BUFFER_SIZE 3
 #define WAIT_TIME 1
-#define RESPONSE_SIZE sizeof(Response)
-#define LIBERATION_SIZE sizeof(Liberation)
+#define MSG_SIZE sizeof(Message) - sizeof(long)
 
 // semaphore names
 #define BUFFER_EMPTY_SEM "/buffer_empty"
-#define BUFFER_FULL_SEM "/buffer_full"
-#define MUTEX_SEM "/mutex"
+
+// mutex names
+#define COUNTER_MUTEX "/counter"
+#define BUFFER_MUTEX "/mutex"
 
 #endif
