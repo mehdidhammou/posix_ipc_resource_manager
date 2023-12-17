@@ -1,10 +1,10 @@
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
-extern ResourceList process_requests[PROCESS_NUM - 1];
-extern Status process_statuses[PROCESS_NUM - 1];
-extern ResourceList resources;
 extern sem_t *buffer_mutex;
+extern ResourceList resources;
+extern Status process_statuses[PROCESS_NUM - 1];
+extern ResourceList process_requests[PROCESS_NUM - 1];
 
 void display_process_requests()
 {

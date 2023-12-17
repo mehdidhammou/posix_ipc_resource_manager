@@ -20,7 +20,7 @@ const Test test_paths[] = {
 // constants
 #define PROCESS_NUM 6
 #define BUFFER_SIZE 3
-#define WAIT_TIME 1
+#define WAIT_TIME 2
 #define MSG_SIZE sizeof(Message) - sizeof(long)
 
 // semaphore names

@@ -25,6 +25,7 @@ void process(int choice, long i)
         case 2:
             req = (Request){i, inst.type, inst.resources};
             send_request(req);
+            printf("%d: request, {%d,%d,%d}\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
             resp = get_response(i);
             if (!resp.is_available)
                 resp = get_response(i);
@@ -32,10 +33,12 @@ void process(int choice, long i)
 
         case 3:
             lib = (Liberation){i, inst.resources};
+            printf("%ld: Liberation, {%d,%d,%d}\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
             send_liberation(lib, liberation_msgids[i]);
             break;
 
         case 4:
+            printf("%ld: Finish\n", i + 1);
             req = (Request){i, inst.type, inst.resources};
             send_request(req);
             break;
@@ -51,72 +54,51 @@ void manager()
 {
     int next_lib_queue = 0;
     int active_processes = PROCESS_NUM - 1;
-    int empty_queues = 0;
-    int last_attempted_activation = -1;
+    int queues_empty = 1;
 
-    while (active_processes > 0 || empty_queues != PROCESS_NUM - 1)
+    while (active_processes > 0 || queues_empty)
     {
-        display_stats();
+        printf("M: active processes : %d, resources : {%d,%d,%d}\n", active_processes, resources.n_1, resources.n_2, resources.n_3);
         sleep(WAIT_TIME);
 
         Request req = get_request();
 
-        if (req.type == 4)
+        switch (req.type)
         {
+        case 2:
+            printf("M:_______________________________Request from %d, {%d,%d,%d}\n", req.id + 1, req.resources.n_1, req.resources.n_2, req.resources.n_3);
+            Response resp = satisfy(req);
+
+            if (resp.is_available)
+            {
+                printf("M: %d's request satisfied\n", req.id + 1);
+                resources.n_1 -= min(req.resources.n_1, resources.n_1);
+                resources.n_2 -= min(req.resources.n_2, resources.n_2);
+                resources.n_3 -= min(req.resources.n_3, resources.n_3);
+
+                activate_process(req);
+                send_response(resp);
+            }
+            else
+            {
+                block_process(req);
+            }
+            break;
+
+        case 3:
+            printf("M: _______________________________Queue Check\n");
+            printf("M: checking queue : %d\n", next_lib_queue + 1);
+            next_lib_queue = check_liberation_queues(next_lib_queue, &queues_empty);
+            printf("M: next queue : %d\n", next_lib_queue + 1);
+            satisfy_other();
+            break;
+
+        case 4:
+            printf("M: _______________________________ %d Finished\n", req.id + 1);
             finish_process(req);
             active_processes--;
-            display_stats();
-            continue;
-        }
-
-        if (req.type == 2)
-        {
-            Response resp = get_resources(req);
-            (resp.is_available) ? activate_process(req) : block_process(req);
-            send_response(resp);
-            display_stats();
-            continue;
-        }
-
-        if (req.type == -1)
-        {
-            next_lib_queue = check_liberation_queues(next_lib_queue, &empty_queues);
-
-            int max_priority_index = -1;
-            time_t max_priority = -1;
-
-            for (long i = 0; i < PROCESS_NUM - 1; i++)
-            {
-                if (process_statuses[i].state != 1)
-                    continue;
-
-                time_t priority = time(NULL) - process_statuses[i].time_blocked;
-
-                if (priority > max_priority && i != last_attempted_activation)
-                {
-                    max_priority = priority;
-                    max_priority_index = i;
-                }
-            }
-
-            if (max_priority_index != -1)
-            {
-                Request req = {max_priority_index, 2, process_requests[max_priority_index]};
-                Response resp = get_resources(req);
-                if (resp.is_available)
-                {
-                    last_attempted_activation = -1;
-                    display_resources();
-                    sleep(WAIT_TIME);
-                    activate_process(req);
-                    send_response(resp);
-                    display_stats();
-                }
-                else
-                {
-                    last_attempted_activation = max_priority_index;
-                }
-            }
+            satisfy_other();
+            break;
         }
     }
 

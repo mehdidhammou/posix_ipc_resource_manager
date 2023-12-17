@@ -1,9 +1,6 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-#define RESOURCE_NUM sizeof(ResourceList) / sizeof(int)
-#define MAX_RESOURCE_CHARS 10
-
 typedef struct
 {
     long mtype;

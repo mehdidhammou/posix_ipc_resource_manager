@@ -8,6 +8,9 @@
 int liberation_msgids[PROCESS_NUM - 1];
 int response_msgid;
 
+extern ResourceList resources;
+extern Status process_statuses[PROCESS_NUM - 1];
+
 void init_message_queues()
 {
     // create 6 message queues , 5 for the resource liberation and 1 for the response
@@ -51,6 +54,8 @@ void send_response(Response resp)
         perror("msgsnd");
         exit(1);
     }
+
+    printf("M: Response : %s to %ld\n", resp.is_available ? "available" : "not available", resp.id + 1);
 }
 
 Response get_response(long i)
@@ -65,6 +70,7 @@ Response get_response(long i)
     }
 
     sscanf(msg.mtext, "%d", &resp.is_available);
+    printf("%ld: Response, %s\n", resp.id + 1, resp.is_available ? "available, continuing..." : "not available, blocked");
     return resp;
 }
 
@@ -96,9 +102,46 @@ Liberation get_liberation(int liberations_msgid)
     {
         lib.id = msg.mtype - 1;
         sscanf(msg.mtext, "%d,%d,%d", &lib.resources.n_1, &lib.resources.n_2, &lib.resources.n_3);
+        printf("M: Liberation from %ld, {%d,%d,%d}\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
     }
 
     return lib;
+}
+
+int check_liberation_queues(int next_lib_queue, int *queues_empty)
+{
+    Liberation lib;
+
+    int i;
+    for (i = next_lib_queue; i < PROCESS_NUM - 1; i++)
+    {
+        lib = get_liberation(liberation_msgids[i]);
+
+        if (lib.id != -1)
+        {
+            (*queues_empty) = 0;
+
+            resources.n_1 += lib.resources.n_1;
+            resources.n_2 += lib.resources.n_2;
+            resources.n_3 += lib.resources.n_3;
+
+            printf("M: new resources : {%d,%d,%d}\n", resources.n_1, resources.n_2, resources.n_3);
+
+            process_statuses[lib.id].resources.n_1 -= lib.resources.n_1;
+            process_statuses[lib.id].resources.n_2 -= lib.resources.n_2;
+            process_statuses[lib.id].resources.n_3 -= lib.resources.n_3;
+
+            break;
+        }
+        else
+        {
+            (*queues_empty) == 1;
+        }
+    }
+
+    int next_id = i == PROCESS_NUM - 1 ? 0 : (i + 1) % (PROCESS_NUM - 1);
+
+    return next_id;
 }
 
 void cleanup_mqs()

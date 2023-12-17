@@ -27,6 +27,7 @@ void send_request(Request req)
     sem_wait(buffer_empty);
     sem_wait(buffer_mutex);
 
+
     buffer[*write_idx] = req;
 
     (*write_idx) = ((*write_idx) + 1) % BUFFER_SIZE;
@@ -40,18 +41,17 @@ void send_request(Request req)
 
 Request get_request()
 {
-    Request req = {.id = -1, .type = -1, .resources = {0, 0, 0}};
+    // req.type = 3 means no request
+    Request req = {.id = -1, .type = 3, .resources = {0, 0, 0}};
 
     sem_wait(counter_mutex);
     if (*counter == 0)
     {
-        // no requests in buffer
         sem_post(counter_mutex);
         return req;
     }
     sem_post(counter_mutex);
     sem_wait(buffer_mutex);
-
 
     req = buffer[*read_idx];
 
