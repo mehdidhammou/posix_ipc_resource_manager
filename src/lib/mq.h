@@ -55,10 +55,10 @@ void send_response(Response resp)
         exit(1);
     }
 
-    printf("M: Response : %s to %ld\n", resp.is_available ? "available" : "not available", resp.id + 1);
+    printf("M: Response : %s to %d\n", resp.is_available ? "available" : "not available", resp.id + 1);
 }
 
-Response get_response(long i)
+Response get_response(int i)
 {
     Message msg;
     Response resp = {.id = i};
@@ -70,14 +70,14 @@ Response get_response(long i)
     }
 
     sscanf(msg.mtext, "%d", &resp.is_available);
-    printf("%ld: Response, %s\n", resp.id + 1, resp.is_available ? "available, continuing..." : "not available, blocked");
+    printf("%d: Response, %s\n", resp.id + 1, resp.is_available ? "available, continuing..." : "not available, blocked");
     return resp;
 }
 
-void send_liberation(Liberation lib, int liberations_msgid)
+void send_liberation(Operation op, int liberations_msgid)
 {
-    Message msg = {.mtype = lib.id + 1};
-    sprintf(msg.mtext, "%d,%d,%d", lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
+    Message msg = {.mtype = op.id + 1};
+    sprintf(msg.mtext, "%d,%d,%d", op.resources.n_1, op.resources.n_2, op.resources.n_3);
 
     if (msgsnd(liberations_msgid, &msg, MSG_SIZE, 0) == -1)
     {
@@ -86,9 +86,9 @@ void send_liberation(Liberation lib, int liberations_msgid)
     }
 }
 
-Liberation get_liberation(int liberations_msgid)
+Operation get_liberation(int liberations_msgid)
 {
-    Liberation lib = {.id = -1};
+    Operation op = {.id = -1, .type = 3};
     Message msg;
     if (msgrcv(liberations_msgid, &msg, MSG_SIZE, 0, IPC_NOWAIT) == -1)
     {
@@ -100,46 +100,40 @@ Liberation get_liberation(int liberations_msgid)
     }
     else
     {
-        lib.id = msg.mtype - 1;
-        sscanf(msg.mtext, "%d,%d,%d", &lib.resources.n_1, &lib.resources.n_2, &lib.resources.n_3);
-        printf("M: Liberation from %ld, {%d,%d,%d}\n", lib.id + 1, lib.resources.n_1, lib.resources.n_2, lib.resources.n_3);
+        op.id = msg.mtype - 1;
+        sscanf(msg.mtext, "%d,%d,%d", &op.resources.n_1, &op.resources.n_2, &op.resources.n_3);
+        printf("M: Liberation from %d, {%d,%d,%d}\n", op.id + 1, op.resources.n_1, op.resources.n_2, op.resources.n_3);
     }
 
-    return lib;
+    return op;
 }
 
-int check_liberation_queues(int next_lib_queue, int *queues_empty)
+int check_liberation_queues(int next_lib_queue)
 {
-    Liberation lib;
+    Operation op;
 
     int i;
     for (i = next_lib_queue; i < PROCESS_NUM - 1; i++)
     {
-        lib = get_liberation(liberation_msgids[i]);
+        op = get_liberation(liberation_msgids[i]);
 
-        if (lib.id != -1)
+        if (op.id != -1)
         {
-            (*queues_empty) = 0;
-
-            resources.n_1 += lib.resources.n_1;
-            resources.n_2 += lib.resources.n_2;
-            resources.n_3 += lib.resources.n_3;
+            resources.n_1 += op.resources.n_1;
+            resources.n_2 += op.resources.n_2;
+            resources.n_3 += op.resources.n_3;
 
             printf("M: new resources : {%d,%d,%d}\n", resources.n_1, resources.n_2, resources.n_3);
 
-            process_statuses[lib.id].resources.n_1 -= lib.resources.n_1;
-            process_statuses[lib.id].resources.n_2 -= lib.resources.n_2;
-            process_statuses[lib.id].resources.n_3 -= lib.resources.n_3;
+            process_statuses[op.id].resources.n_1 -= op.resources.n_1;
+            process_statuses[op.id].resources.n_2 -= op.resources.n_2;
+            process_statuses[op.id].resources.n_3 -= op.resources.n_3;
 
             break;
         }
-        else
-        {
-            (*queues_empty) == 1;
-        }
     }
 
-    int next_id = i == PROCESS_NUM - 1 ? 0 : (i + 1) % (PROCESS_NUM - 1);
+    int next_id = i == (PROCESS_NUM - 1) ? 0 : (i + 1) % (PROCESS_NUM - 1);
 
     return next_id;
 }

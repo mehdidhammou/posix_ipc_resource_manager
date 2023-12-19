@@ -12,8 +12,9 @@ sem_t *buffer_empty;
 sem_t *buffer_mutex;
 sem_t *counter_mutex;
 
+
 // buffer for requests made by the processes
-Request *buffer;
+Operation *buffer;
 
 // counter for number of requests in buffer
 int *counter;
@@ -22,13 +23,12 @@ int *counter;
 int *write_idx;
 int *read_idx;
 
-void send_request(Request req)
+void send_request(Operation op)
 {
     sem_wait(buffer_empty);
     sem_wait(buffer_mutex);
 
-
-    buffer[*write_idx] = req;
+    buffer[*write_idx] = op;
 
     (*write_idx) = ((*write_idx) + 1) % BUFFER_SIZE;
 
@@ -39,21 +39,21 @@ void send_request(Request req)
     sem_post(buffer_mutex);
 }
 
-Request get_request()
+Operation get_request()
 {
     // req.type = 3 means no request
-    Request req = {.id = -1, .type = 3, .resources = {0, 0, 0}};
+    Operation op = {.type = 3};
 
     sem_wait(counter_mutex);
     if (*counter == 0)
     {
         sem_post(counter_mutex);
-        return req;
+        return op;
     }
     sem_post(counter_mutex);
     sem_wait(buffer_mutex);
 
-    req = buffer[*read_idx];
+    op = buffer[*read_idx];
 
     (*read_idx) = ((*read_idx) + 1) % BUFFER_SIZE;
 
@@ -64,7 +64,7 @@ Request get_request()
     sem_post(buffer_mutex);
     sem_post(buffer_empty);
 
-    return req;
+    return op;
 }
 
 void init_semaphores()
@@ -93,13 +93,13 @@ void init_mutexes()
 
 void init_shared_memory()
 {
-    int buffer_id = shmget(IPC_PRIVATE, sizeof(Request) * BUFFER_SIZE, IPC_CREAT | 0644);
+    int buffer_id = shmget(IPC_PRIVATE, sizeof(Operation) * BUFFER_SIZE, IPC_CREAT | 0644);
     if (buffer_id == -1)
     {
         perror("shmget");
         exit(1);
     }
-    buffer = (Request *)shmat(buffer_id, NULL, 0);
+    buffer = (Operation *)shmat(buffer_id, NULL, 0);
     if (buffer == (void *)-1)
     {
         perror("shmat");

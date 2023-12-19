@@ -65,11 +65,11 @@ void cleanup()
     printf("Cleaned up.\n");
 }
 
-bool is_request_satisfied(ResourceList req, ResourceList res)
+bool resources_match(ResourceList req, ResourceList res)
 {
     return req.n_1 == res.n_1 && req.n_2 == res.n_2 && req.n_3 == res.n_3;
 }
-
+    
 char *get_file_path(int choice, int i)
 {
     char file_name[10];
@@ -86,60 +86,60 @@ char *get_file_path(int choice, int i)
     return path;
 }
 
-bool check_availability(Request req, ResourceList res)
+bool check_availability(Operation op, ResourceList res)
 {
     ResourceList gathered = res;
 
     for (int i = 0; i < PROCESS_NUM - 1; i++)
     {
-        if (process_statuses[i].state != 1 || i == req.id)
+        if (process_statuses[i].state != 1 || i == op.id)
             continue;
 
         int needed, available, taken;
 
-        if (req.resources.n_1 - gathered.n_1 > 0)
+        if (op.resources.n_1 - gathered.n_1 > 0)
         {
-            needed = req.resources.n_1 - gathered.n_1;
+            needed = op.resources.n_1 - gathered.n_1;
             available = process_statuses[i].resources.n_1;
             taken = min(needed, available);
             gathered.n_1 += taken;
         }
 
-        if (req.resources.n_2 - gathered.n_2 > 0)
+        if (op.resources.n_2 - gathered.n_2 > 0)
         {
-            needed = req.resources.n_2 - gathered.n_2;
+            needed = op.resources.n_2 - gathered.n_2;
             available = process_statuses[i].resources.n_2;
             taken = min(needed, available);
             gathered.n_2 += taken;
         }
 
-        if (req.resources.n_3 - gathered.n_3 > 0)
+        if (op.resources.n_3 - gathered.n_3 > 0)
         {
-            needed = req.resources.n_3 - gathered.n_3;
+            needed = op.resources.n_3 - gathered.n_3;
             available = process_statuses[i].resources.n_3;
             taken = min(needed, available);
             gathered.n_3 += taken;
         }
 
-        if (is_request_satisfied(req.resources, gathered))
+        if (resources_match(op.resources, gathered))
             return true;
     }
 
     return false;
 }
 
-void gather_resources(Request req, ResourceList res)
+void gather_resources(Operation op, ResourceList res)
 {
     ResourceList gathered = res;
 
     for (int i = 0; i < PROCESS_NUM - 1; i++)
     {
-        if (process_statuses[i].state != 1 || i == req.id)
+        if (process_statuses[i].state != 1 || i == op.id)
             continue;
 
-        if (req.resources.n_1 - gathered.n_1 > 0)
+        if (op.resources.n_1 - gathered.n_1 > 0)
         {
-            int needed = req.resources.n_1 - gathered.n_1;
+            int needed = op.resources.n_1 - gathered.n_1;
             int available = process_statuses[i].resources.n_1;
             int taken = min(needed, available);
 
@@ -148,9 +148,9 @@ void gather_resources(Request req, ResourceList res)
             process_requests[i].n_1 += taken;
         }
 
-        if (req.resources.n_2 - gathered.n_2 > 0)
+        if (op.resources.n_2 - gathered.n_2 > 0)
         {
-            int needed = req.resources.n_2 - gathered.n_2;
+            int needed = op.resources.n_2 - gathered.n_2;
             int available = process_statuses[i].resources.n_2;
             int taken = min(needed, available);
 
@@ -159,9 +159,9 @@ void gather_resources(Request req, ResourceList res)
             process_requests[i].n_2 += taken;
         }
 
-        if (req.resources.n_3 - gathered.n_3 > 0)
+        if (op.resources.n_3 - gathered.n_3 > 0)
         {
-            int needed = req.resources.n_3 - gathered.n_3;
+            int needed = op.resources.n_3 - gathered.n_3;
             int available = process_statuses[i].resources.n_3;
             int taken = min(needed, available);
 
@@ -170,56 +170,54 @@ void gather_resources(Request req, ResourceList res)
             process_requests[i].n_3 += taken;
         }
 
-        if (is_request_satisfied(req.resources, gathered))
+        if (resources_match(op.resources, gathered))
             break;
     }
 }
 
-void activate_process(Request req)
+void activate_process(Operation op)
 {
-    process_statuses[req.id].state = 0;
-    process_statuses[req.id].time_blocked = 0;
+    process_statuses[op.id].state = 0;
+    process_statuses[op.id].time_blocked = 0;
 
-    process_statuses[req.id].resources.n_1 += req.resources.n_1;
-    process_statuses[req.id].resources.n_2 += req.resources.n_2;
-    process_statuses[req.id].resources.n_3 += req.resources.n_3;
+    process_statuses[op.id].resources.n_1 += op.resources.n_1;
+    process_statuses[op.id].resources.n_2 += op.resources.n_2;
+    process_statuses[op.id].resources.n_3 += op.resources.n_3;
 
-    process_requests[req.id] = (ResourceList){0, 0, 0};
+    process_requests[op.id] = (ResourceList){0, 0, 0};
 }
 
-void block_process(Request req)
+void block_process(Operation op)
 {
-    printf("M: cannot satisfy %d blocked\n", req.id + 1);
-    process_statuses[req.id].state = 1;
-    process_statuses[req.id].time_blocked = time(NULL);
+    printf("M: cannot satisfy %d blocked\n", op.id + 1);
+    process_statuses[op.id].state = 1;
+    process_statuses[op.id].time_blocked = time(NULL);
 
-    process_requests[req.id] = req.resources;
+    process_requests[op.id] = op.resources;
 }
 
-void finish_process(Request req)
+void finish_process(Operation op)
 {
-    printf("%d finished\n", req.id + 1);
-
-    process_statuses[req.id].resources = (ResourceList){0, 0, 0};
+    process_statuses[op.id].resources = (ResourceList){0, 0, 0};
 }
 
-Response satisfy(Request req)
+Response satisfy(Operation op)
 {
-    Response resp = {.id = req.id, .is_available = 0};
+    Response resp = {.id = op.id, .is_available = 0};
     ResourceList res = {0, 0, 0};
 
-    res.n_1 = min(resources.n_1, req.resources.n_1);
-    res.n_2 = min(resources.n_2, req.resources.n_2);
-    res.n_3 = min(resources.n_3, req.resources.n_3);
+    res.n_1 = min(resources.n_1, op.resources.n_1);
+    res.n_2 = min(resources.n_2, op.resources.n_2);
+    res.n_3 = min(resources.n_3, op.resources.n_3);
 
-    if (is_request_satisfied(req.resources, res))
+    if (resources_match(op.resources, res))
     {
         resp.is_available = 1;
     }
-    else if (check_availability(req, res))
+    else if (check_availability(op, res))
     {
         resp.is_available = 1;
-        gather_resources(req, res);
+        gather_resources(op, res);
     }
 
     return resp;
@@ -246,17 +244,17 @@ void satisfy_other()
 
     if (max_priority_index != -1)
     {
-        Request req = {max_priority_index, 2, process_requests[max_priority_index]};
-        Response resp = satisfy(req);
+        Operation op = {.id = max_priority_index, .type = 2, .resources = process_requests[max_priority_index]};
+        Response resp = satisfy(op);
 
         if (resp.is_available)
         {
-            printf("M: activated blocked process %d\n", max_priority_index + 1);
-            resources.n_1 -= min(req.resources.n_1,resources.n_1);
-            resources.n_2 -= min(req.resources.n_2,resources.n_2);
-            resources.n_3 -= min(req.resources.n_3,resources.n_3);
+            printf("M: activated blocked process %d, {%d,%d,%d}\n", max_priority_index + 1, op.resources.n_1, op.resources.n_2, op.resources.n_3);
+            resources.n_1 -= min(op.resources.n_1,resources.n_1);
+            resources.n_2 -= min(op.resources.n_2,resources.n_2);
+            resources.n_3 -= min(op.resources.n_3,resources.n_3);
 
-            activate_process(req);
+            activate_process(op);
             send_response(resp);
         }
     }

@@ -16,28 +16,16 @@ typedef struct
 
 typedef struct
 {
+    int id;
     int type;
     ResourceList resources;
-} Instruction;
+} Operation;
 
 typedef struct
 {
     int id;
-    int type;
-    ResourceList resources;
-} Request;
-
-typedef struct
-{
-    long id;
     int is_available;
 } Response;
-
-typedef struct
-{
-    long id;
-    ResourceList resources;
-} Liberation;
 
 typedef struct
 {
@@ -51,5 +39,14 @@ typedef struct
     const char *name;
     const char *path;
 } Test;
+
+typedef struct
+{
+    Operation *buffer;
+    int *write_idx;
+    int *read_idx;
+    int *counter;
+} SharedMemory;
+
 
 #endif
