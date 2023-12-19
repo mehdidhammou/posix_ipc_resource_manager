@@ -23,6 +23,8 @@ int *counter;
 int *write_idx;
 int *read_idx;
 
+int buffer_id, write_idx_id, read_idx_id, counter_id;
+
 void send_request(Operation op)
 {
     sem_wait(buffer_empty);
@@ -93,7 +95,7 @@ void init_mutexes()
 
 void init_shared_memory()
 {
-    int buffer_id = shmget(IPC_PRIVATE, sizeof(Operation) * BUFFER_SIZE, IPC_CREAT | 0644);
+    buffer_id = shmget(IPC_PRIVATE, sizeof(Operation) * BUFFER_SIZE, IPC_CREAT | 0644);
     if (buffer_id == -1)
     {
         perror("shmget");
@@ -106,7 +108,7 @@ void init_shared_memory()
         exit(1);
     }
 
-    int write_idx_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
+    write_idx_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
     if (write_idx_id == -1)
     {
         perror("shmget");
@@ -120,7 +122,7 @@ void init_shared_memory()
     }
 
     *write_idx = 0;
-    int read_idx_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
+    read_idx_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
     if (read_idx_id == -1)
     {
         perror("shmget");
@@ -134,7 +136,7 @@ void init_shared_memory()
     }
     *read_idx = 0;
 
-    int counter_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
+    counter_id = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | 0644);
     if (counter_id == -1)
     {
         perror("shmget");
@@ -168,6 +170,11 @@ void cleanup_shared_memory()
     shmdt(write_idx);
     shmdt(read_idx);
     shmdt(counter);
+
+    shmctl(buffer_id, IPC_RMID, NULL);
+    shmctl(write_idx_id, IPC_RMID, NULL);
+    shmctl(read_idx_id, IPC_RMID, NULL);
+    shmctl(counter_id, IPC_RMID, NULL);
 }
 
 #endif
