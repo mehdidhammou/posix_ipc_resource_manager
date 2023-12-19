@@ -54,7 +54,7 @@ void manager()
 {
     int next_lib_queue = 0;
     int active_processes = PROCESS_NUM - 1;
-    int queues_empty = 1;
+    int queues_empty = 0;
 
     while (active_processes > 0 || queues_empty)
     {
