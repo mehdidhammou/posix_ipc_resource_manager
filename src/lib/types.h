@@ -48,5 +48,4 @@ typedef struct
     int *counter;
 } SharedMemory;
 
-
 #endif

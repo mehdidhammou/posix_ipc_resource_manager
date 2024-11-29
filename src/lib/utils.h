@@ -69,7 +69,7 @@ bool resources_match(ResourceList req, ResourceList res)
 {
     return req.n_1 == res.n_1 && req.n_2 == res.n_2 && req.n_3 == res.n_3;
 }
-    
+
 char *get_file_path(int choice, int i)
 {
     char file_name[10];
@@ -250,9 +250,9 @@ void satisfy_other()
         if (resp.is_available)
         {
             printf("M: activated blocked process %d, {%d,%d,%d}\n", max_priority_index + 1, op.resources.n_1, op.resources.n_2, op.resources.n_3);
-            resources.n_1 -= min(op.resources.n_1,resources.n_1);
-            resources.n_2 -= min(op.resources.n_2,resources.n_2);
-            resources.n_3 -= min(op.resources.n_3,resources.n_3);
+            resources.n_1 -= min(op.resources.n_1, resources.n_1);
+            resources.n_2 -= min(op.resources.n_2, resources.n_2);
+            resources.n_3 -= min(op.resources.n_3, resources.n_3);
 
             activate_process(op);
             send_response(resp);
